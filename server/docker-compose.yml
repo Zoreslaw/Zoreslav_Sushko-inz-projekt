@@ -1,0 +1,159 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: teamup-postgres
+    environment:
+      POSTGRES_DB: teamup
+      POSTGRES_USER: teamup_user
+      POSTGRES_PASSWORD: teamup_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teamup_user -d teamup"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: teamup-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./TeamUp.Api
+      dockerfile: Dockerfile
+    container_name: teamup-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "5001:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/users"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  ml-service:
+    build:
+      context: ./network
+      dockerfile: ml-service/Dockerfile
+    container_name: teamup-ml-service
+    environment:
+      MODEL_PATH: /shared/models/twotower_v6_optimal.pt
+      FLASK_ENV: production
+    ports:
+      - "5000:5000"
+    volumes:
+      - ml_models:/shared/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  ml-trainer:
+    build:
+      context: .
+      dockerfile: ml-training/Dockerfile
+    container_name: teamup-ml-trainer
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: teamup
+      DB_USER: teamup_user
+      DB_PASSWORD: teamup_password
+      REDIS_URL: redis://redis:6379
+      MODEL_PATH: /shared/models/twotower_v6_optimal.pt
+      LOG_PATH: /shared/logs/training.log
+      TRAINING_INTERVAL_HOURS: 8
+      TRAIN_ON_START: "true"
+      MIN_USERS: 10
+      MIN_INTERACTIONS: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ml_models:/shared/models
+      - ml_logs:/shared/logs
+
+  ml-admin-api:
+    build:
+      context: .
+      dockerfile: ml-admin/Dockerfile
+    container_name: teamup-ml-admin-api
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: teamup
+      DB_USER: teamup_user
+      DB_PASSWORD: teamup_password
+      REDIS_URL: redis://redis:6379
+      MODEL_PATH: /shared/models/twotower_v6_optimal.pt
+      LOG_PATH: /shared/logs/training.log
+      ML_SERVICE_URL: http://ml-service:5000
+    ports:
+      - "6000:6000"
+    depends_on:
+      - postgres
+      - ml-service
+      - redis
+    volumes:
+      - ml_models:/shared/models
+      - ml_logs:/shared/logs
+
+  ml-admin-dashboard:
+    build:
+      context: ./ml-admin/dashboard
+      dockerfile: Dockerfile
+    container_name: teamup-ml-admin-dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - ml-admin-api
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: teamup-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  redis_data:
+    driver: local
+  ml_models:
+    driver: local
+  ml_logs:
+    driver: local
+

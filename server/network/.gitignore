@@ -1,0 +1,181 @@
+# TeamUp .gitignore
+
+# Environment variables (NEVER commit secrets!)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Docker volumes and data
+postgres_data/
+redis_data/
+
+# Backups
+backups/
+*.sql
+*.dump
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# .NET
+bin/
+obj/
+out/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vs/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Node (if using Node tools)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Compiled model files (optional - depends on strategy)
+# *.pt
+# *.pth
+# *.h5
+# *.pkl
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+tmp/
+temp/
+
+# SSL certificates (use secrets management!)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+.dockerignore.backup
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Pytest
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Test results
+TestResults/
+test-results/
+coverage/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Mac
+*.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Terraform (if using IaC)
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Kubernetes secrets
+*-secret.yaml
+*-secrets.yaml
+
+# Keep these
+!.gitkeep
+!env.example
+

@@ -1,0 +1,18 @@
+@TeamUp.Api_HostAddress = http://localhost:5001
+
+### Get all users
+GET {{TeamUp.Api_HostAddress}}/api/users
+Accept: application/json
+
+###
+
+### Get user by ID
+GET {{TeamUp.Api_HostAddress}}/api/users/user-123
+Accept: application/json
+
+###
+
+### Health check (Swagger)
+GET {{TeamUp.Api_HostAddress}}/swagger/index.html
+
+###

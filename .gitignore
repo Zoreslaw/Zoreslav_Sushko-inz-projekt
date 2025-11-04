@@ -388,6 +388,8 @@ ui-debug.log
 .firebaserc
 firebase.json
 .firebaserc
+**/configs/**/*.json
+client/configs/
 
 # ============================================
 # IDE / Editor Files

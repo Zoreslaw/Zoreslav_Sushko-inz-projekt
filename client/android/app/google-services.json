@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "557470981427",
+    "firebase_url": "https://teamup-4f142-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "teamup-4f142",
+    "storage_bucket": "teamup-4f142.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:557470981427:android:6acd6b5dce61fa3cbab246",
+        "android_client_info": {
+          "package_name": "com.umaps.teamup"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "557470981427-5sgpl64hvj4uovh5l5vampo987e4k9va.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.umaps.teamup",
+            "certificate_hash": "a46a2e132fe7e1a8e3886330327db650378d292e"
+          }
+        },
+        {
+          "client_id": "557470981427-03c3mk56mknb028felssqmhu7rdmh8kl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0dP03MJPAd2MuisF9drWH_xteLXqERn8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "557470981427-03c3mk56mknb028felssqmhu7rdmh8kl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,49 @@
+
+{
+    "language": "Język",
+    "home": {
+        "title": "Strona główna",
+        "welcome": "Witaj",
+        "subtitle": "Przykładowa aplikacja i18n!",
+        "description": "This is an example React Native application demonstrating how to implement internationalization (i18n) using react-i18next. The app allows users to switch between different languages for a more localized experience.",
+        "exploringLanguages": "Eksplorowanie języków",
+        "exploringLanguagesDescription": "Kliknij na flagi krajów, aby eksplorować zawartość aplikacji w różnych językach.",
+        "learnMore": "Chcesz dowiedzieć się więcej?",
+        "repositoryLinkText": "Repozytorium projektu na GitHub",
+        "articlesLinkText": "Więcej artykułów"
+    },
+    "features": {
+        "title": "Funkcje",
+        "collapsibles": {
+            "i18n": {
+                "title": "Internationalizacja z i18next",
+                "description": "Używa react-i18next do zarządzania językiem, umożliwiając aplikacji być lokalizowana dla różnych języków."
+            },
+            "persistent": {
+                "title": "Trwały wybór języka",
+                "description": "Używa AsyncStorage do trwale przechowywania ulubionego języka użytkownika, zapewniając spójną doświadczenie między ponownym uruchomieniem aplikacji."
+            },
+            "fallback": {
+                "title": "Język domyślny",
+                "description": "Domyślnie używa języka urządzenia, jeśli nie zapisano preferencji języka."
+            },
+            "switching": {
+                "title": "Łatwy wybór języka",
+                "description": "Użytkownicy mogą zmieniać język poprzez kliknięcie na flagi krajów."
+            }
+        }
+    },
+    "sign-in-page": {
+        "sign-in":"Zaloguj się",
+        "gmail": "Kontynuuj z Gmail",
+        "apple": "Kontynuuj z Apple",
+        "email": "Kontynuuj z Email",
+        "submit": "Zaloguj się",
+        "welcome-words": "Kontynuując, zgadzasz się z \n Regulaminem i Polityką Prywatności",
+        "email-sign-in-title": "Zaloguj się z Email",
+        "password-label": "Twoje HASŁO",
+        "forgot-password": "Zapomniałeś hasła?",
+        "no-account": "Nie masz konta?",
+        "sign-up": "Zarejestruj się"
+      }
+}

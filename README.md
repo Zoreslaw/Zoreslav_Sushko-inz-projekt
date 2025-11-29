@@ -278,5 +278,5 @@ System is functioning correctly when:
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 1.1
 **Last Updated:** 2025

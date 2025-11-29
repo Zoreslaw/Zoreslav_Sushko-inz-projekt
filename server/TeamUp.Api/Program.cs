@@ -17,6 +17,14 @@ builder.Services.AddHttpClient<MLServiceClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+builder.Services.AddHttpClient<CBServiceClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["CBService:BaseUrl"] ?? "http://cb-service:5001");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddSingleton<AlgorithmService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>

@@ -7,19 +7,18 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  Grid,
 } from '@mui/material';
-import { CheckCircle, Error, DeviceHub, Memory } from '@mui/icons-material';
+import { CheckCircle, Error, Psychology } from '@mui/icons-material';
 import { mlAdminApi, MLHealth } from '../api/mlAdminApi';
 
-export const MLServiceStatus: React.FC = () => {
+export const CBServiceStatus: React.FC = () => {
   const [health, setHealth] = useState<MLHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchHealth = useCallback(async () => {
     try {
-      const data = await mlAdminApi.mlServiceHealth();
+      const data = await mlAdminApi.cbServiceHealth();
       
       // Only update if data actually changed
       setHealth((prevHealth) => {
@@ -41,7 +40,7 @@ export const MLServiceStatus: React.FC = () => {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 30000); // Refresh every 30s (less frequent)
+    const interval = setInterval(fetchHealth, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [fetchHealth]);
 
@@ -63,8 +62,9 @@ export const MLServiceStatus: React.FC = () => {
     <Card>
       <CardContent>
         <Box display="flex" alignItems="center" mb={2}>
+          <Psychology sx={{ mr: 1 }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            ML Service Status
+            CB Service Status
           </Typography>
           {isHealthy ? (
             <Chip
@@ -92,14 +92,6 @@ export const MLServiceStatus: React.FC = () => {
         {isHealthy && health ? (
           <Box>
             <Box display="flex" alignItems="center" mb={1}>
-              <DeviceHub sx={{ mr: 1, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">
-                Device: <strong>{health.device || 'Unknown'}</strong>
-              </Typography>
-            </Box>
-
-            <Box display="flex" alignItems="center" mb={1}>
-              <Memory sx={{ mr: 1, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
                 Model Loaded:{' '}
                 <strong>{health.model_loaded ? 'Yes' : 'No'}</strong>
@@ -126,12 +118,11 @@ export const MLServiceStatus: React.FC = () => {
           </Box>
         ) : (
           <Alert severity="warning">
-            ML Service is not responding. Please check the service status.
+            CB Service is not responding. Please check the service status.
           </Alert>
         )}
       </CardContent>
     </Card>
   );
 };
-
 

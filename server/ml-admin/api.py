@@ -26,6 +26,8 @@ CURRENT_TRAINING_LOG = os.getenv('CURRENT_TRAINING_LOG', '/shared/logs/current_t
 NEXT_TRAINING_FILE = os.getenv('NEXT_TRAINING_FILE', '/shared/logs/next_training.json')
 TRIGGER_FILE = os.getenv('TRIGGER_FILE', '/shared/logs/trigger_training.flag')
 ML_SERVICE_URL = os.getenv('ML_SERVICE_URL', 'http://ml-service:5000')
+CB_SERVICE_URL = os.getenv('CB_SERVICE_URL', 'http://cb-service:5001')
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://backend:8080')
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379')
 REDIS_CHANNEL = os.getenv('REDIS_CHANNEL', 'training_logs')
@@ -120,6 +122,25 @@ def get_model_info():
         return jsonify({'exists': False, 'path': MODEL_PATH, 'message': 'Model file not found'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.get('/api/cb-model/info')
+def get_cb_model_info():
+    """Get CB service model info (featurizer state)."""
+    try:
+        r = requests.get(f'{CB_SERVICE_URL}/ml/model-info', timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            return jsonify({
+                'exists': True,
+                'version': data.get('version', 'content-based-v1'),
+                'architecture': data.get('architecture', 'Content-Based'),
+                'parameters': data.get('parameters', {}),
+                'users_fitted': data.get('users_fitted', 0),
+                'message': 'Content-Based service is ready'
+            }), 200
+        return jsonify({'exists': False, 'message': 'CB service model not available'}), 200
+    except Exception as e:
+        return jsonify({'exists': False, 'error': str(e), 'message': 'CB service unavailable'}), 503
 
 @app.get('/api/training/logs')
 def get_training_logs():
@@ -281,6 +302,38 @@ def check_ml_service():
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({'status': 'unavailable', 'error': str(e)}), 503
+
+@app.get('/api/cb-service/health')
+def check_cb_service():
+    try:
+        r = requests.get(f'{CB_SERVICE_URL}/health', timeout=5)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'status': 'unavailable', 'error': str(e)}), 503
+
+@app.get('/api/algorithm')
+def get_algorithm():
+    """Proxy to backend API to get current algorithm."""
+    try:
+        r = requests.get(f'{BACKEND_URL}/api/users/algorithm', timeout=5)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e), 'algorithm': 'TwoTower'}), 503
+
+@app.post('/api/algorithm')
+def set_algorithm():
+    """Proxy to backend API to set algorithm."""
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/algorithm',
+            json=data,
+            timeout=5,
+            headers={'Content-Type': 'application/json'}
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
 
 @app.get('/api/stats')
 def get_stats():

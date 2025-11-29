@@ -611,6 +611,17 @@ _site/
 .stylelintcache
 
 # ============================================
+# Documentation Files (Thesis/Dissertation)
+# ============================================
+*.docx
+*.doc
+*.odt
+szablon*.docx
+*szablon*.docx
+praca*.docx
+*dokument*.docx
+
+# ============================================
 # Custom Project Files
 # ============================================
 # Keep example configs but ignore actual configs

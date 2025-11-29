@@ -14,15 +14,21 @@ public class UsersController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<UsersController> _logger;
     private readonly MLServiceClient _mlServiceClient;
+    private readonly CBServiceClient _cbServiceClient;
+    private readonly AlgorithmService _algorithmService;
 
     public UsersController(
         ApplicationDbContext context, 
         ILogger<UsersController> logger,
-        MLServiceClient mlServiceClient)
+        MLServiceClient mlServiceClient,
+        CBServiceClient cbServiceClient,
+        AlgorithmService algorithmService)
     {
         _context = context;
         _logger = logger;
         _mlServiceClient = mlServiceClient;
+        _cbServiceClient = cbServiceClient;
+        _algorithmService = algorithmService;
     }
 
     [HttpGet]
@@ -118,6 +124,41 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpGet("algorithm")]
+    public ActionResult<AlgorithmResponse> GetAlgorithm()
+    {
+        var algorithm = _algorithmService.GetCurrentAlgorithm();
+        return Ok(new AlgorithmResponse
+        {
+            Algorithm = algorithm,
+            Message = $"Current algorithm is {algorithm}"
+        });
+    }
+
+    [HttpPost("algorithm")]
+    public ActionResult<AlgorithmResponse> SetAlgorithm([FromBody] SetAlgorithmRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Algorithm))
+        {
+            return BadRequest(new { error = "Algorithm is required" });
+        }
+
+        var success = _algorithmService.SetAlgorithm(request.Algorithm);
+        if (!success)
+        {
+            return BadRequest(new { error = "Invalid algorithm. Must be 'TwoTower' or 'ContentBased'" });
+        }
+
+        var currentAlgorithm = _algorithmService.GetCurrentAlgorithm();
+        _logger.LogInformation("Algorithm set to {Algorithm}", currentAlgorithm);
+
+        return Ok(new AlgorithmResponse
+        {
+            Algorithm = currentAlgorithm,
+            Message = $"Algorithm successfully set to {currentAlgorithm}"
+        });
+    }
+
     [HttpPost("recommendations/{userId}")]
     public async Task<ActionResult<IEnumerable<RecommendationWithUser>>> GetRecommendations(
         string userId, 
@@ -142,21 +183,40 @@ public class UsersController : ControllerBase
                 return Ok(new List<RecommendationWithUser>());
             }
 
-            _logger.LogInformation(
-                "Getting recommendations for user {UserId} from {CandidateCount} candidates",
-                userId, candidates.Count);
+            // Get the current algorithm from the service
+            var algorithm = _algorithmService.GetCurrentAlgorithm();
 
-            var mlResponse = await _mlServiceClient.GetRecommendationsAsync(
-                targetUser, 
-                candidates, 
-                topK);
+            _logger.LogInformation(
+                "Getting recommendations for user {UserId} from {CandidateCount} candidates using algorithm {Algorithm}",
+                userId, candidates.Count, algorithm);
+
+            MLRecommendationResponse? mlResponse = null;
+            string serviceName = "";
+
+            if (algorithm.Equals("ContentBased", StringComparison.OrdinalIgnoreCase))
+            {
+                serviceName = "CB Service";
+                mlResponse = await _cbServiceClient.GetRecommendationsAsync(
+                    targetUser, 
+                    candidates, 
+                    topK);
+            }
+            else
+            {
+                // Default to TwoTower (ML Service)
+                serviceName = "ML Service";
+                mlResponse = await _mlServiceClient.GetRecommendationsAsync(
+                    targetUser, 
+                    candidates, 
+                    topK);
+            }
 
             if (mlResponse == null)
             {
                 return StatusCode(503, new 
                 { 
-                    error = "ML Service unavailable",
-                    message = "Could not get recommendations from ML service"
+                    error = $"{serviceName} unavailable",
+                    message = $"Could not get recommendations from {serviceName}"
                 });
             }
 

@@ -156,6 +156,10 @@ export const mlAdminApi = {
     return fetchJSON('/api/model/info', 'GET');
   },
 
+  async getCBModelInfo(): Promise<any> {
+    return fetchJSON('/api/cb-model/info', 'GET');
+  },
+
   async mlServiceHealth(): Promise<MLHealth> {
     return fetchJSON('/api/ml-service/health', 'GET');
   },
@@ -167,6 +171,19 @@ export const mlAdminApi = {
 
   async getStats(): Promise<Stats> {
     return fetchJSON('/api/stats', 'GET');
+  },
+
+  async cbServiceHealth(): Promise<MLHealth> {
+    return fetchJSON('/api/cb-service/health', 'GET');
+  },
+
+  // ---- Algorithm Management ----
+  async getAlgorithm(): Promise<{ algorithm: string; message: string }> {
+    return fetchJSON('/api/algorithm', 'GET');
+  },
+
+  async setAlgorithm(algorithm: string): Promise<{ algorithm: string; message: string }> {
+    return fetchJSON('/api/algorithm', 'POST', { algorithm });
   },
 
   // ---- Low-level utilities ----

@@ -69,6 +69,25 @@ services:
       retries: 3
       start_period: 40s
 
+  cb-service:
+    build:
+      context: ./cb-service
+      dockerfile: Dockerfile
+    container_name: teamup-cb-service
+    environment:
+      BACKEND_URL: http://backend:8080
+    ports:
+      - "5002:5001"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   ml-trainer:
     build:
       context: .
@@ -111,12 +130,19 @@ services:
       MODEL_PATH: /shared/models/twotower_v6_optimal.pt
       LOG_PATH: /shared/logs/training.log
       ML_SERVICE_URL: http://ml-service:5000
+      CB_SERVICE_URL: http://cb-service:5001
+      BACKEND_URL: http://backend:8080
     ports:
       - "6000:6000"
     depends_on:
-      - postgres
-      - ml-service
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+      cb-service:
+        condition: service_started
     volumes:
       - ml_models:/shared/models
       - ml_logs:/shared/logs

@@ -21,10 +21,12 @@ from flask_cors import CORS
 # Config
 # -----------------------------------
 MODEL_PATH = os.getenv('MODEL_PATH', '/shared/models/twotower_v6_optimal.pt')
+MODELS_DIR = os.getenv('MODELS_DIR', '/shared/models')
 LOG_PATH = os.getenv('LOG_PATH', '/shared/logs/training.log')
 CURRENT_TRAINING_LOG = os.getenv('CURRENT_TRAINING_LOG', '/shared/logs/current_training.log')
 NEXT_TRAINING_FILE = os.getenv('NEXT_TRAINING_FILE', '/shared/logs/next_training.json')
 TRIGGER_FILE = os.getenv('TRIGGER_FILE', '/shared/logs/trigger_training.flag')
+STOP_TRAINING_FILE = os.getenv('STOP_TRAINING_FILE', '/shared/logs/stop_training.flag')
 ML_SERVICE_URL = os.getenv('ML_SERVICE_URL', 'http://ml-service:5000')
 CB_SERVICE_URL = os.getenv('CB_SERVICE_URL', 'http://cb-service:5001')
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://backend:8080')
@@ -143,14 +145,6 @@ def get_cb_model_info():
     except Exception as e:
         return jsonify({'exists': False, 'error': str(e), 'message': 'CB service unavailable'}), 503
 
-@app.get('/api/training/logs')
-def get_training_logs():
-    try:
-        limit = max(1, min(500, int(request.args.get('limit', 50))))
-        return jsonify(_tail_json_lines(LOG_PATH, limit)), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.get('/api/training/status')
 def get_training_status():
     """
@@ -213,6 +207,23 @@ def trigger_training():
             f.write(stream_id)
 
         return jsonify({'message': 'Training triggered successfully', 'timestamp': datetime.utcnow().isoformat()}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.post('/api/training/stop')
+def stop_training():
+    """Stop the currently running training by creating a stop flag file."""
+    try:
+        # Check if training is actually running
+        is_training = _process_running('train_from_db.py') or _recently_modified(CURRENT_TRAINING_LOG, 30)
+        if not is_training:
+            return jsonify({'message': 'No training is currently running'}), 400
+        
+        # Create stop flag file
+        with open(STOP_TRAINING_FILE, 'w') as f:
+            f.write(datetime.utcnow().isoformat())
+        
+        return jsonify({'message': 'Stop signal sent to training process'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -372,6 +383,24 @@ def get_aggregate_metrics():
     except Exception as e:
         return jsonify({'error': str(e)}), 503
 
+@app.get('/api/metrics/compare')
+def compare_algorithms():
+    """Proxy to backend API to compare both algorithms on the same holdout set."""
+    try:
+        k_values = request.args.getlist('kValues', type=int)
+        params = {}
+        if k_values:
+            params['kValues'] = k_values
+        
+        r = requests.get(
+            f'{BACKEND_URL}/api/users/metrics/compare',
+            params=params,
+            timeout=120  # Longer timeout since we're evaluating both algorithms
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
 @app.post('/api/users/generate-interactions')
 def generate_interactions():
     """Proxy to backend API to generate random user interactions."""
@@ -442,6 +471,228 @@ def get_stats():
             'total_likes': total_likes,
             'total_dislikes': total_dislikes,
             'total_interactions': total_likes + total_dislikes
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.get('/api/models/history')
+def get_models_history():
+    """Get paginated list of all saved models."""
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = max(1, min(100, int(request.args.get('per_page', 20))))
+        
+        models_dir = Path(MODELS_DIR)
+        if not models_dir.exists():
+            return jsonify({'models': [], 'total': 0, 'page': page, 'per_page': per_page, 'total_pages': 0}), 200
+        
+        # Find all model files
+        model_files = []
+        current_model_path = Path(MODEL_PATH)
+        current_model_info = None
+        
+        # Get info about the current model file if it exists
+        if current_model_path.exists():
+            try:
+                current_stat = current_model_path.stat()
+                current_model_info = {
+                    'size': current_stat.st_size,
+                    'mtime': current_stat.st_mtime,
+                    'path': str(current_model_path.resolve())
+                }
+            except Exception:
+                pass
+        
+        for file_path in models_dir.glob('twotower_v6_*.pt'):
+            if file_path.is_file() and not file_path.name.endswith('.tmp'):
+                try:
+                    # Skip the "optimal" current model file - we only want versioned models
+                    if file_path.name == 'twotower_v6_optimal.pt':
+                        continue
+                    
+                    stat = file_path.stat()
+                    # Extract version from filename: twotower_v6_YYYYMMDD_HHMMSS.pt
+                    version = file_path.stem.replace('twotower_v6_', '')
+                    
+                    # Skip if version doesn't match timestamp pattern (should be YYYYMMDD_HHMMSS)
+                    if not version.replace('_', '').replace('-', '').isdigit() or len(version) < 15:
+                        continue
+                    
+                    mtime = datetime.fromtimestamp(stat.st_mtime)
+                    size_mb = round(stat.st_size / (1024 * 1024), 2)
+                    
+                    # Check if this is the current model by comparing file size and modification time
+                    # (since optimal.pt is a copy of the versioned model)
+                    is_current = False
+                    if current_model_info:
+                        try:
+                            # Compare by file size and modification time (they should match if it's the same file)
+                            file_size = stat.st_size
+                            file_mtime = stat.st_mtime
+                            if (file_size == current_model_info['size'] and 
+                                abs(file_mtime - current_model_info['mtime']) < 2):  # Allow 2 second difference
+                                is_current = True
+                        except Exception:
+                            pass
+                    
+                    model_files.append({
+                        'filename': file_path.name,
+                        'version': version,
+                        'path': str(file_path),
+                        'size_mb': size_mb,
+                        'created_at': mtime.isoformat(),
+                        'is_current': is_current
+                    })
+                except Exception:
+                    continue
+        
+        # Sort by creation time (newest first)
+        model_files.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        # Paginate
+        total = len(model_files)
+        total_pages = (total + per_page - 1) // per_page
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_models = model_files[start_idx:end_idx]
+        
+        # Load training log info for each model
+        training_logs = _tail_json_lines(LOG_PATH, 1000)  # Load recent logs
+        for model in paginated_models:
+            # Find matching log entry - try multiple matching strategies
+            matching_log = None
+            for log in training_logs:
+                # Match by exact filename
+                if log.get('model_filename') == model['filename']:
+                    matching_log = log
+                    break
+                # Match by version (timestamp format)
+                if log.get('model_version') == model['version']:
+                    matching_log = log
+                    break
+                # Match by model_path containing the version
+                model_path = log.get('model_path', '')
+                if model['version'] in model_path or model['filename'] in model_path:
+                    matching_log = log
+                    break
+            
+            if matching_log:
+                model['num_users'] = matching_log.get('num_users')
+                model['num_interactions'] = matching_log.get('num_interactions')
+                model['duration_seconds'] = matching_log.get('duration_seconds')
+                model['status'] = matching_log.get('status', 'unknown')
+                # Use timestamp from log if available (more accurate)
+                if matching_log.get('timestamp'):
+                    try:
+                        log_timestamp = datetime.fromisoformat(matching_log['timestamp'].replace('Z', '+00:00'))
+                        model['created_at'] = log_timestamp.isoformat()
+                    except Exception:
+                        pass
+            else:
+                model['status'] = 'unknown'
+        
+        return jsonify({
+            'models': paginated_models,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': total_pages
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.get('/api/models/<version>/logs')
+def get_model_logs(version):
+    """Get training logs for a specific model version."""
+    try:
+        # Find the model file
+        models_dir = Path(MODELS_DIR)
+        model_file = None
+        for file_path in models_dir.glob(f'twotower_v6_{version}.pt'):
+            if file_path.is_file():
+                model_file = file_path
+                break
+        
+        if not model_file:
+            return jsonify({'error': 'Model not found'}), 404
+        
+        # Find matching log entry
+        training_logs = _tail_json_lines(LOG_PATH, 1000)
+        matching_log = None
+        for log in training_logs:
+            if log.get('model_filename') == model_file.name or log.get('model_version') == version:
+                matching_log = log
+                break
+        
+        if not matching_log:
+            return jsonify({'error': 'Training logs not found for this model'}), 404
+        
+        # Try to get the actual training log file if it exists
+        log_content = None
+        log_file_path = Path(MODELS_DIR) / f'training_log_{version}.txt'
+        if log_file_path.exists():
+            try:
+                with open(log_file_path, 'r') as f:
+                    log_content = f.read()
+            except Exception:
+                pass
+        
+        return jsonify({
+            'version': version,
+            'model_info': matching_log,
+            'log_content': log_content
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.post('/api/models/<version>/activate')
+def activate_model(version):
+    """Set a specific model version as the active/current model."""
+    try:
+        import shutil
+        
+        # Find the model file
+        models_dir = Path(MODELS_DIR)
+        model_file = None
+        for file_path in models_dir.glob(f'twotower_v6_{version}.pt'):
+            if file_path.is_file():
+                model_file = file_path
+                break
+        
+        if not model_file:
+            return jsonify({'error': 'Model not found'}), 404
+        
+        # Backup current model if it exists
+        current_model_path = Path(MODEL_PATH)
+        if current_model_path.exists():
+            backup_path = current_model_path.with_suffix('.pt.backup')
+            if backup_path.exists():
+                backup_path.unlink()
+            current_model_path.rename(backup_path)
+        
+        # Copy selected model to current location
+        shutil.copy2(model_file, current_model_path)
+        
+        # Notify ML service to reload the model
+        try:
+            ml_service_url = os.getenv('ML_SERVICE_URL', 'http://ml-service:5000')
+            import requests
+            reload_response = requests.post(
+                f'{ml_service_url}/ml/reload-model',
+                timeout=30
+            )
+            if reload_response.status_code == 200:
+                print(f"ML service reloaded model {version}")
+            else:
+                print(f"ML service reload returned status {reload_response.status_code}")
+        except Exception as reload_error:
+            print(f"Failed to notify ML service to reload: {reload_error}")
+            # Don't fail the activation if reload notification fails
+        
+        return jsonify({
+            'message': f'Model {version} activated successfully',
+            'model_path': str(current_model_path),
+            'ml_service_reloaded': True
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

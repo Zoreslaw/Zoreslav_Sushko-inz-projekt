@@ -49,9 +49,18 @@ export type Stats = {
   total_interactions: number;
 };
 
-export type TrainingLog =
-  (Omit<LastTrainingLog, 'status'> & { status: 'success' | 'error' | 'skipped' }) |
-  (Omit<LastTrainingLog, 'status' | 'timestamp'> & { status: 'in_progress'; timestamp: 'IN_PROGRESS' });
+export type AggregateMetricsResponse = {
+  algorithm: string;
+  timestamp: string;
+  userCount?: number;
+  avgPrecisionAtK?: Record<number, number>;
+  avgRecallAtK?: Record<number, number>;
+  avgNDCGAtK?: Record<number, number>;
+  avgHitRateAtK?: Record<number, number>;
+  avgMutualAcceptRateAtK?: Record<number, number>;
+  avgChatStartRateAtK?: Record<number, number>;
+};
+
 
 type ApiMethod = 'GET' | 'POST';
 type Json = Record<string, unknown> | unknown[];
@@ -133,16 +142,6 @@ export const mlAdminApi = {
   },
 
   // ---- Logs (optional helpers for non-stream views) ----
-  async getRecentLogs(limit = 50): Promise<Array<Record<string, any>>> {
-    const safe = Math.max(1, Math.min(500, limit));
-    return fetchJSON(`/api/training/logs?limit=${safe}`, 'GET');
-  },
-
-  async getTrainingLogs(limit = 50): Promise<TrainingLog[]> {
-    const safe = Math.max(1, Math.min(500, limit));
-    return fetchJSON<TrainingLog[]>(`/api/training/logs?limit=${safe}`, 'GET');
-  },
-
   async getCurrentLogFile(): Promise<{ logs: string[]; is_training: boolean }> {
     return fetchJSON('/api/training/logs/current', 'GET');
   },
@@ -205,6 +204,13 @@ export const mlAdminApi = {
     return fetchJSON(`/api/metrics/aggregate${query ? `?${query}` : ''}`, 'GET');
   },
 
+  async compareAlgorithms(kValues: number[] = [5, 10, 20]): Promise<{ TwoTower?: AggregateMetricsResponse; ContentBased?: AggregateMetricsResponse }> {
+    const params = new URLSearchParams();
+    kValues.forEach(k => params.append('kValues', k.toString()));
+    const query = params.toString();
+    return fetchJSON(`/api/metrics/compare${query ? `?${query}` : ''}`, 'GET');
+  },
+
   async generateInteractions(count: number = 100): Promise<any> {
     return fetchJSON(`/api/users/generate-interactions?count=${count}`, 'POST');
   },
@@ -228,8 +234,49 @@ export const mlAdminApi = {
     return await response.json();
   },
 
+  // ---- Training Control ----
+  async stopTraining(): Promise<{ message: string }> {
+    return fetchJSON('/api/training/stop', 'POST');
+  },
+
+  // ---- Model History ----
+  async getModelsHistory(page: number = 1, perPage: number = 20): Promise<{
+    models: ModelHistoryItem[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+  }> {
+    return fetchJSON(`/api/models/history?page=${page}&per_page=${perPage}`, 'GET');
+  },
+
+  async getModelLogs(version: string): Promise<{
+    version: string;
+    model_info: any;
+    log_content: string | null;
+  }> {
+    return fetchJSON(`/api/models/${version}/logs`, 'GET');
+  },
+
+  async activateModel(version: string): Promise<{ message: string; model_path: string }> {
+    return fetchJSON(`/api/models/${version}/activate`, 'POST');
+  },
+
   // ---- Low-level utilities ----
   ApiError,
+};
+
+export type ModelHistoryItem = {
+  filename: string;
+  version: string;
+  path: string;
+  size_mb: number;
+  created_at: string;
+  is_current: boolean;
+  num_users?: number;
+  num_interactions?: number;
+  duration_seconds?: number;
+  status: string;
 };
 
 // Backward-compatible type alias used by some components

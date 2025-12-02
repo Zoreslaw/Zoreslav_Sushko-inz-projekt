@@ -43,7 +43,10 @@ class TrainingConfig:
     DB_PASSWORD = os.getenv('DB_PASSWORD', 'teamup_password')
 
     MODEL_PATH = os.getenv('MODEL_PATH', '/shared/models/twotower_v6_optimal.pt')
+    MODELS_DIR = os.getenv('MODELS_DIR', '/shared/models')
     LOG_PATH = os.getenv('LOG_PATH', '/shared/logs/training.log')
+    CURRENT_TRAINING_LOG = os.getenv('CURRENT_TRAINING_LOG', '/shared/logs/current_training.log')
+    STOP_TRAINING_FILE = os.getenv('STOP_TRAINING_FILE', '/shared/logs/stop_training.flag')
 
     MIN_USERS = int(os.getenv('MIN_USERS', '10'))
     MIN_INTERACTIONS = int(os.getenv('MIN_INTERACTIONS', '5'))
@@ -168,6 +171,15 @@ def train_model():
         logger.info(f"Configuration: {len(users)} users, {re_total} interactions")
         logger.info(f"Epochs: 100, Learning Rate: 1e-4, Batch Size: 16")
         logger.info("=" * 60)
+        
+        # Check for stop flag before starting training
+        if os.path.exists(TrainingConfig.STOP_TRAINING_FILE):
+            logger.info("Stop training flag detected before training start. Skipping training.")
+            try:
+                os.remove(TrainingConfig.STOP_TRAINING_FILE)
+            except Exception:
+                pass
+            return False
 
         model = train_model_v6_extreme(
             dat,
@@ -191,19 +203,61 @@ def train_model():
         )
 
         logger.info("=" * 60)
-        logger.info(f"Saving model to {TrainingConfig.MODEL_PATH}")
-        os.makedirs(os.path.dirname(TrainingConfig.MODEL_PATH), exist_ok=True)
-        tmp = TrainingConfig.MODEL_PATH + '.tmp'
+        
+        # Check if training was stopped
+        was_stopped = os.path.exists(TrainingConfig.STOP_TRAINING_FILE)
+        if was_stopped:
+            logger.warning("⚠️ Training was stopped by user request")
+            try:
+                os.remove(TrainingConfig.STOP_TRAINING_FILE)
+            except Exception:
+                pass
+            save_training_log({
+                'timestamp': start.isoformat(),
+                'duration_seconds': (datetime.now() - start).total_seconds(),
+                'num_users': len(users),
+                'num_interactions': total_inter,
+                'status': 'stopped'
+            })
+            return False
+        
+        # Save model with version (timestamp)
+        model_version = start.strftime('%Y%m%d_%H%M%S')
+        model_filename = f'twotower_v6_{model_version}.pt'
+        model_path = os.path.join(TrainingConfig.MODELS_DIR, model_filename)
+        os.makedirs(TrainingConfig.MODELS_DIR, exist_ok=True)
+        
+        logger.info(f"Saving model to {model_path}")
+        tmp = model_path + '.tmp'
         torch.save(model.state_dict(), tmp)
-        os.replace(tmp, TrainingConfig.MODEL_PATH)
+        os.replace(tmp, model_path)
+        
+        # Save training log for this model version
+        log_file_path = os.path.join(TrainingConfig.MODELS_DIR, f'training_log_{model_version}.txt')
+        if os.path.exists(TrainingConfig.CURRENT_TRAINING_LOG):
+            import shutil
+            shutil.copy2(TrainingConfig.CURRENT_TRAINING_LOG, log_file_path)
+        
+        # Also update the "current" model symlink/path for backward compatibility
+        current_model_path = TrainingConfig.MODEL_PATH
+        if os.path.exists(current_model_path):
+            # Backup old current model
+            backup_path = current_model_path + '.backup'
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            os.rename(current_model_path, backup_path)
+        # Copy new model to current location
+        import shutil
+        shutil.copy2(model_path, current_model_path)
 
         end = datetime.now()
         dur = (end - start).total_seconds()
         logger.info("=" * 60)
         logger.info("✅ TRAINING COMPLETED SUCCESSFULLY!")
         logger.info(f"Duration: {dur:.1f}s ({dur/60:.1f} minutes)")
-        logger.info(f"Model saved: {TrainingConfig.MODEL_PATH}")
-        logger.info(f"Model size: {os.path.getsize(TrainingConfig.MODEL_PATH) / (1024*1024):.2f} MB")
+        logger.info(f"Model saved: {model_path}")
+        logger.info(f"Model size: {os.path.getsize(model_path) / (1024*1024):.2f} MB")
+        logger.info(f"Model version: {model_version}")
         logger.info("=" * 60)
 
         save_training_log({
@@ -211,7 +265,9 @@ def train_model():
             'duration_seconds': dur,
             'num_users': len(users),
             'num_interactions': total_inter,
-            'model_path': TrainingConfig.MODEL_PATH,
+            'model_path': model_path,
+            'model_version': model_version,
+            'model_filename': model_filename,
             'status': 'success'
         })
         return True

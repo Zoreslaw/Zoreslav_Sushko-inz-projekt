@@ -60,23 +60,55 @@ class ContentBasedRecommender:
             logger.warning("[recommender] target_user=%s produced empty vector", target_user.id)
             return []
         
-        # Filter candidates
+        # Filter candidates - first try strict eligibility, then relax if needed
         elig = make_eligibility_filter(target_user)
         users_filtered = [u for u in candidates if u.id != target_user.id and elig(u)]
+        
+        # If we don't have enough candidates after strict filtering, relax the filter
+        # This ensures we can return the requested number of recommendations
+        if len(users_filtered) < top_k:
+            # Relaxed filter: only exclude self
+            users_filtered = [u for u in candidates if u.id != target_user.id]
+            if len(users_filtered) > len([u for u in candidates if u.id != target_user.id and elig(u)]):
+                logger.debug(
+                    "[recommender] Relaxed eligibility filter for target_user=%s: %d -> %d candidates",
+                    target_user.id,
+                    len([u for u in candidates if u.id != target_user.id and elig(u)]),
+                    len(users_filtered)
+                )
+        
         if not users_filtered:
             logger.warning("[recommender] No eligible candidates after filtering for target_user=%s", target_user.id)
             return []
         
         # Build pool vectors
         pool_vecs: Dict[str, SparseVector] = {}
+        empty_vector_count = 0
         for u in users_filtered:
             vec = self.featurizer.transform(u)
             if vec:  # Only include users with non-empty vectors
                 pool_vecs[u.id] = vec
+            else:
+                empty_vector_count += 1
+        
+        # Log if many candidates have empty vectors
+        if empty_vector_count > 0:
+            logger.debug(
+                "[recommender] %d candidates had empty feature vectors (no matching games/categories/languages in vocabulary) for target_user=%s",
+                empty_vector_count, target_user.id
+            )
         
         if not pool_vecs:
             logger.warning("[recommender] No valid candidate vectors for target_user=%s", target_user.id)
             return []
+        
+        # If we still don't have enough after vector filtering, log a warning
+        if len(pool_vecs) < top_k:
+            logger.debug(
+                "[recommender] Only %d valid candidate vectors (requested %d) for target_user=%s. "
+                "Some candidates may have empty feature vectors.",
+                len(pool_vecs), top_k, target_user.id
+            )
         
         # Build query vector
         if mode == "strict":
@@ -98,5 +130,14 @@ class ContentBasedRecommender:
         
         # Score and rank
         scores = score_against_pool(q_query, pool_vecs, exclude=None)
-        return topk(scores, top_k)
+        result = topk(scores, top_k)
+        
+        # Log if we're returning fewer recommendations than requested
+        if len(result) < top_k:
+            logger.warning(
+                "[recommender] Requested %d recommendations but only returning %d (candidates: %d, filtered: %d, valid vectors: %d)",
+                top_k, len(result), len(candidates), len(users_filtered), len(pool_vecs)
+            )
+        
+        return result
 

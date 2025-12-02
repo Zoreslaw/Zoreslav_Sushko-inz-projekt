@@ -14,7 +14,6 @@ import { Psychology } from '@mui/icons-material';
 import { ModelInfoCard } from './components/ModelInfoCard';
 import { StatsCard } from './components/StatsCard';
 import { TrainingControl } from './components/TrainingControl';
-import { TrainingLogs } from './components/TrainingLogs';
 import { MLServiceStatus } from './components/MLServiceStatus';
 import { CBServiceStatus } from './components/CBServiceStatus';
 import { AlgorithmSelector } from './components/AlgorithmSelector';
@@ -22,6 +21,7 @@ import { MetricsCard } from './components/MetricsCard';
 import { MetricsComparison } from './components/MetricsComparison';
 import { DataGenerator } from './components/DataGenerator';
 import { DatasetUploader } from './components/DatasetUploader';
+import { ModelHistory } from './components/ModelHistory';
 import { AlgorithmProvider, useAlgorithm } from './contexts/AlgorithmContext';
 
 const darkTheme = createTheme({
@@ -72,10 +72,10 @@ const AppContent: React.FC = () => {
           </Grid>
         )}
 
-        {/* Training Logs - Only show for TwoTower */}
+        {/* Model History - Only show for TwoTower */}
         {!isContentBased && (
           <Grid size={12}>
-            <TrainingLogs />
+            <ModelHistory />
           </Grid>
         )}
 

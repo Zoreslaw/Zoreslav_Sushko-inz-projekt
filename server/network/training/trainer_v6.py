@@ -12,6 +12,7 @@ NEW training strategies:
 """
 
 from typing import Optional, Callable, Dict, List
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -267,7 +268,18 @@ def train_model_v6_extreme(
     
     # Training loop
     log_fn(f"Starting training loop: {epochs} epochs, {len(dl)} batches per epoch")
+    stop_training_file = os.getenv('STOP_TRAINING_FILE', '/shared/logs/stop_training.flag')
+    
     for epoch in range(1, epochs + 1):
+        # Check for stop flag
+        if os.path.exists(stop_training_file):
+            log_fn("⚠️ Stop training flag detected. Stopping training...")
+            try:
+                os.remove(stop_training_file)
+            except Exception:
+                pass
+            break
+        
         model.train()
         losses = []
         main_losses = []
@@ -276,6 +288,14 @@ def train_model_v6_extreme(
         
         batch_count = 0
         for u_idx, v_pos_idx, v_neg_idx in dl:
+            # Check for stop flag during batch processing
+            if os.path.exists(stop_training_file):
+                log_fn("⚠️ Stop training flag detected. Stopping training...")
+                try:
+                    os.remove(stop_training_file)
+                except Exception:
+                    pass
+                break
             batch_count += 1
             u_idx = u_idx.numpy().tolist()
             v_pos_idx = v_pos_idx.numpy().tolist()
@@ -321,6 +341,15 @@ def train_model_v6_extreme(
             # Log progress for first epoch or every 100 batches
             if (epoch == 1 and batch_count % 100 == 0) or (epoch <= 3 and batch_count % 500 == 0):
                 log_fn(f"Epoch {epoch:03d} | Batch {batch_count}/{len(dl)} | Loss: {loss.item():.4f}")
+        
+        # Check stop flag after epoch
+        if os.path.exists(stop_training_file):
+            log_fn("⚠️ Stop training flag detected. Stopping training...")
+            try:
+                os.remove(stop_training_file)
+            except Exception:
+                pass
+            break
         
         if use_scheduler:
             scheduler.step()

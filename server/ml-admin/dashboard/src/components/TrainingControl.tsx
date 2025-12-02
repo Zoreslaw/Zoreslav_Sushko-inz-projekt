@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, Typography, Box, Button, Chip, Alert, CircularProgress, Select, MenuItem, SelectChangeEvent } from '@mui/material';
-import { PlayArrow, AutoMode, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
+import { PlayArrow, Stop, AutoMode, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
 import { mlAdminApi, TrainingStatus, AlgorytmType } from '../api/mlAdminApi';
 import { TrainingConsole } from './TrainingConsole';
 import { NextTrainingProgress } from './NextTrainingProgress';
@@ -12,6 +12,7 @@ export const TrainingControl: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
   const prevIsTrainingRef = useRef<boolean>(false);
@@ -54,6 +55,20 @@ export const TrainingControl: React.FC = () => {
       setError(e.message ?? 'Trigger failed');
     } finally {
       setTriggering(false);
+    }
+  };
+
+  const handleStopTraining = async () => {
+    try {
+      setStopping(true);
+      setMessage(null);
+      await mlAdminApi.stopTraining();
+      fetchStatus();
+      setMessage('Stop signal sent to training process.');
+    } catch (e: any) {
+      setError(e.message ?? 'Stop failed');
+    } finally {
+      setStopping(false);
     }
   };
 
@@ -111,16 +126,30 @@ export const TrainingControl: React.FC = () => {
           </Box>
         )}
 
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={triggering ? <CircularProgress size={20} /> : <PlayArrow />}
-          onClick={handleTriggerTraining}
-          disabled={status?.is_training || triggering}
-          fullWidth
-        >
-          {triggering ? 'Triggering…' : 'Trigger Manual Training'}
-        </Button>
+        <Box display="flex" gap={1} mb={2}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={triggering ? <CircularProgress size={20} /> : <PlayArrow />}
+            onClick={handleTriggerTraining}
+            disabled={status?.is_training || triggering}
+            sx={{ flex: 1 }}
+          >
+            {triggering ? 'Triggering…' : 'Trigger Training'}
+          </Button>
+          {status?.is_training && (
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={stopping ? <CircularProgress size={20} /> : <Stop />}
+              onClick={handleStopTraining}
+              disabled={stopping}
+              sx={{ flex: 1 }}
+            >
+              {stopping ? 'Stopping…' : 'Stop Training'}
+            </Button>
+          )}
+        </Box>
 
         <Select
           value={algorytmType}

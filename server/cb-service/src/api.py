@@ -175,8 +175,15 @@ async def recommend(request: RecommendationRequest):
         
         processing_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
         
+        # Log if we're returning fewer recommendations than requested
+        if len(results) < request.topK:
+            logger.warning(
+                f"[api] Requested {request.topK} recommendations but only returning {len(results)} "
+                f"(candidates provided: {len(candidates)})"
+            )
+        
         logger.info(
-            f"[api] Generated {len(results)} recommendations in {processing_time_ms}ms"
+            f"[api] Generated {len(results)}/{request.topK} requested recommendations in {processing_time_ms}ms"
         )
         
         return RecommendationResponse(

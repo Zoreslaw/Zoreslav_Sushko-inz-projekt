@@ -102,8 +102,8 @@ services:
       REDIS_URL: redis://redis:6379
       MODEL_PATH: /shared/models/twotower_v6_optimal.pt
       LOG_PATH: /shared/logs/training.log
-      TRAINING_INTERVAL_HOURS: 8
-      TRAIN_ON_START: "true"
+      TRAINING_INTERVAL_HOURS: 24
+      TRAIN_ON_START: "false"
       MIN_USERS: 10
       MIN_INTERACTIONS: 5
     depends_on:

@@ -362,9 +362,34 @@ public class UsersController : ControllerBase
                     // to measure if the algorithm would have recommended them
                     // We'll use a holdout approach: exclude 20% of liked users for evaluation
                     var likedUsers = user.Liked.ToList();
-                    var holdoutSize = Math.Max(1, (int)(likedUsers.Count * 0.2)); // Hold out 20% for evaluation
-                    var holdoutLiked = likedUsers.Take(holdoutSize).ToHashSet();
-                    var remainingLiked = likedUsers.Skip(holdoutSize).ToHashSet();
+                    
+                    // Ensure minimum holdout size for meaningful evaluation
+                    // If user has few likes, use a larger percentage or minimum of 3
+                    int holdoutSize;
+                    if (likedUsers.Count <= 2)
+                    {
+                        holdoutSize = 1; // Minimum for evaluation
+                    }
+                    else if (likedUsers.Count <= 5)
+                    {
+                        holdoutSize = Math.Max(2, likedUsers.Count - 1); // Leave at least 1 for training
+                    }
+                    else if (likedUsers.Count <= 10)
+                    {
+                        holdoutSize = Math.Max(3, (int)(likedUsers.Count * 0.3)); // 30% for small sets
+                    }
+                    else
+                    {
+                        holdoutSize = Math.Max(5, (int)(likedUsers.Count * 0.2)); // 20% for larger sets, min 5
+                    }
+                    
+                    // Deterministic holdout selection based on user ID hash
+                    // This ensures the same user always gets the same holdout set across algorithm evaluations
+                    var userHash = user.Id.GetHashCode();
+                    var seededRandom = new Random(userHash);
+                    var shuffled = likedUsers.OrderBy(x => seededRandom.Next()).ToList();
+                    var holdoutLiked = shuffled.Take(holdoutSize).ToHashSet();
+                    var remainingLiked = shuffled.Skip(holdoutSize).ToHashSet();
                     
                     // Candidates: all users except self, disliked, and the holdout liked users
                     // But we'll add back the holdout liked users for evaluation
@@ -493,6 +518,192 @@ public class UsersController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error calculating aggregate metrics");
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    /// <summary>
+    /// Evaluate both algorithms on the same holdout set for fair comparison.
+    /// This ensures both algorithms are evaluated on identical ground truth.
+    /// </summary>
+    [HttpGet("metrics/compare")]
+    public async Task<ActionResult<Dictionary<string, AggregateMetricsResponse>>> CompareAlgorithms(
+        [FromQuery] List<int>? kValues = null)
+    {
+        try
+        {
+            var kVals = kValues ?? new List<int> { 5, 10, 20 };
+
+            var users = await _context.Users
+                .Where(u => u.Liked.Count > 0) // Only users with interactions
+                .ToListAsync();
+
+            if (users.Count == 0)
+            {
+                return BadRequest(new { error = "No users with interactions found" });
+            }
+
+            var candidates = await _context.Users.ToListAsync();
+            var mlMetrics = new List<RecommendationMetrics>();
+            var cbMetrics = new List<RecommendationMetrics>();
+
+            foreach (var user in users.Take(100)) // Limit to 100 users for performance
+            {
+                try
+                {
+                    // Create deterministic holdout set (same for both algorithms)
+                    var likedUsers = user.Liked.ToList();
+                    
+                    int holdoutSize;
+                    if (likedUsers.Count <= 2)
+                    {
+                        holdoutSize = 1;
+                    }
+                    else if (likedUsers.Count <= 5)
+                    {
+                        holdoutSize = Math.Max(2, likedUsers.Count - 1);
+                    }
+                    else if (likedUsers.Count <= 10)
+                    {
+                        holdoutSize = Math.Max(3, (int)(likedUsers.Count * 0.3));
+                    }
+                    else
+                    {
+                        holdoutSize = Math.Max(5, (int)(likedUsers.Count * 0.2));
+                    }
+                    
+                    // Deterministic selection based on user ID
+                    var userHash = user.Id.GetHashCode();
+                    var seededRandom = new Random(userHash);
+                    var shuffled = likedUsers.OrderBy(x => seededRandom.Next()).ToList();
+                    var holdoutLiked = shuffled.Take(holdoutSize).ToHashSet();
+                    var remainingLiked = shuffled.Skip(holdoutSize).ToHashSet();
+                    
+                    // Build candidate set (same for both algorithms)
+                    var userCandidates = candidates
+                        .Where(u => u.Id != user.Id && 
+                                   !user.Disliked.Contains(u.Id) &&
+                                   !remainingLiked.Contains(u.Id))
+                        .ToList();
+                    
+                    var holdoutCandidates = candidates
+                        .Where(u => holdoutLiked.Contains(u.Id))
+                        .ToList();
+                    userCandidates.AddRange(holdoutCandidates);
+
+                    if (userCandidates.Count == 0 || holdoutLiked.Count == 0)
+                        continue;
+
+                    // Calculate mutual accepts and chat starts (same for both algorithms)
+                    var holdoutMutualAccepts = new HashSet<string>();
+                    var holdoutChatStarts = new HashSet<string>();
+                    
+                    foreach (var holdoutId in holdoutLiked)
+                    {
+                        var holdoutUser = await _context.Users.FindAsync(holdoutId);
+                        if (holdoutUser != null && holdoutUser.Liked.Contains(user.Id))
+                        {
+                            holdoutMutualAccepts.Add(holdoutId);
+                            holdoutChatStarts.Add(holdoutId);
+                        }
+                    }
+
+                    // Evaluate TwoTower
+                    var mlResponse = await _mlServiceClient.GetRecommendationsAsync(
+                        user, userCandidates, kVals.Max());
+                    
+                    if (mlResponse != null)
+                    {
+                        var mlRecommendedIds = mlResponse.Results.Select(r => r.UserId).Distinct().ToList();
+                        var mlMetricsForUser = _metricsService.CalculateMetricsWithGroundTruth(
+                            user.Id, mlRecommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
+                        mlMetricsForUser.Algorithm = "TwoTower";
+                        mlMetrics.Add(mlMetricsForUser);
+                    }
+
+                    // Evaluate ContentBased
+                    var cbResponse = await _cbServiceClient.GetRecommendationsAsync(
+                        user, userCandidates, kVals.Max());
+                    
+                    if (cbResponse != null)
+                    {
+                        var cbRecommendedIds = cbResponse.Results.Select(r => r.UserId).Distinct().ToList();
+                        
+                        // Log recommendation count for debugging
+                        _logger.LogDebug(
+                            "User {UserId} ContentBased: Requested {Requested} recommendations, got {Actual} recommendations, holdout size {HoldoutSize}",
+                            user.Id, kVals.Max(), cbRecommendedIds.Count, holdoutLiked.Count);
+                        
+                        var cbMetricsForUser = _metricsService.CalculateMetricsWithGroundTruth(
+                            user.Id, cbRecommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
+                        cbMetricsForUser.Algorithm = "ContentBased";
+                        cbMetrics.Add(cbMetricsForUser);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to calculate comparison metrics for user {UserId}", user.Id);
+                }
+            }
+
+            var result = new Dictionary<string, AggregateMetricsResponse>();
+
+            // Aggregate TwoTower metrics
+            if (mlMetrics.Count > 0)
+            {
+                var mlAggregate = new AggregateMetricsResponse
+                {
+                    Algorithm = "TwoTower",
+                    Timestamp = DateTime.UtcNow,
+                    UserCount = mlMetrics.Count
+                };
+
+                foreach (var k in kVals)
+                {
+                    mlAggregate.AvgPrecisionAtK[k] = mlMetrics.Average(m => m.PrecisionAtK.GetValueOrDefault(k, 0.0));
+                    mlAggregate.AvgRecallAtK[k] = mlMetrics.Average(m => m.RecallAtK.GetValueOrDefault(k, 0.0));
+                    mlAggregate.AvgNDCGAtK[k] = mlMetrics.Average(m => m.NDCGAtK.GetValueOrDefault(k, 0.0));
+                    mlAggregate.AvgHitRateAtK[k] = mlMetrics.Average(m => m.HitRateAtK.GetValueOrDefault(k, 0.0));
+                    mlAggregate.AvgMutualAcceptRateAtK[k] = mlMetrics.Average(m => m.MutualAcceptRateAtK.GetValueOrDefault(k, 0.0));
+                    mlAggregate.AvgChatStartRateAtK[k] = mlMetrics.Average(m => m.ChatStartRateAtK.GetValueOrDefault(k, 0.0));
+                }
+
+                result["TwoTower"] = mlAggregate;
+            }
+
+            // Aggregate ContentBased metrics
+            if (cbMetrics.Count > 0)
+            {
+                var cbAggregate = new AggregateMetricsResponse
+                {
+                    Algorithm = "ContentBased",
+                    Timestamp = DateTime.UtcNow,
+                    UserCount = cbMetrics.Count
+                };
+
+                foreach (var k in kVals)
+                {
+                    cbAggregate.AvgPrecisionAtK[k] = cbMetrics.Average(m => m.PrecisionAtK.GetValueOrDefault(k, 0.0));
+                    cbAggregate.AvgRecallAtK[k] = cbMetrics.Average(m => m.RecallAtK.GetValueOrDefault(k, 0.0));
+                    cbAggregate.AvgNDCGAtK[k] = cbMetrics.Average(m => m.NDCGAtK.GetValueOrDefault(k, 0.0));
+                    cbAggregate.AvgHitRateAtK[k] = cbMetrics.Average(m => m.HitRateAtK.GetValueOrDefault(k, 0.0));
+                    cbAggregate.AvgMutualAcceptRateAtK[k] = cbMetrics.Average(m => m.MutualAcceptRateAtK.GetValueOrDefault(k, 0.0));
+                    cbAggregate.AvgChatStartRateAtK[k] = cbMetrics.Average(m => m.ChatStartRateAtK.GetValueOrDefault(k, 0.0));
+                }
+
+                result["ContentBased"] = cbAggregate;
+            }
+
+            if (result.Count == 0)
+            {
+                return BadRequest(new { error = "Could not calculate metrics for any users" });
+            }
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error comparing algorithms");
             return StatusCode(500, new { error = "Internal server error" });
         }
     }

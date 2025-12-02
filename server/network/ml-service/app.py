@@ -178,6 +178,25 @@ def model_info():
         'totalParameters': sum(p.numel() for p in MODEL.parameters())
     }), 200
 
+@app.post('/ml/reload-model')
+def reload_model():
+    """Reload the model from disk. Useful when model file is updated."""
+    try:
+        logger.info("Reloading model from disk...")
+        load_model()
+        return jsonify({
+            'message': 'Model reloaded successfully',
+            'model_loaded': MODEL is not None,
+            'device': str(DEVICE),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Failed to reload model: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to reload model',
+            'message': str(e)
+        }), 500
+
 @app.errorhandler(404)
 def nf(e): return jsonify({'error': 'Endpoint not found'}), 404
 

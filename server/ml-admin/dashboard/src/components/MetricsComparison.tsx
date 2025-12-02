@@ -43,12 +43,22 @@ export const MetricsComparison: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const [ml, cb] = await Promise.all([
-          mlAdminApi.getAggregateMetrics('TwoTower', kValues).catch(() => null),
-          mlAdminApi.getAggregateMetrics('ContentBased', kValues).catch(() => null),
-        ]);
-        setMlMetrics(ml);
-        setCbMetrics(cb);
+        
+        // Use unified comparison endpoint for fair evaluation on same holdout set
+        const comparison = await mlAdminApi.compareAlgorithms(kValues).catch(() => null);
+        
+        if (comparison) {
+          setMlMetrics(comparison.TwoTower || null);
+          setCbMetrics(comparison.ContentBased || null);
+        } else {
+          // Fallback to separate calls if comparison endpoint fails
+          const [ml, cb] = await Promise.all([
+            mlAdminApi.getAggregateMetrics('TwoTower', kValues).catch(() => null),
+            mlAdminApi.getAggregateMetrics('ContentBased', kValues).catch(() => null),
+          ]);
+          setMlMetrics(ml);
+          setCbMetrics(cb);
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to fetch metrics');
       } finally {

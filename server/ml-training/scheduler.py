@@ -21,6 +21,7 @@ from train_from_db import train_model
 TRAINING_INTERVAL_HOURS = int(os.getenv('TRAINING_INTERVAL_HOURS', '8'))
 TRAIN_ON_START = os.getenv('TRAIN_ON_START', 'true').lower() == 'true'
 TRIGGER_FILE = os.getenv('TRIGGER_FILE', '/shared/logs/trigger_training.flag')
+STOP_TRAINING_FILE = os.getenv('STOP_TRAINING_FILE', '/shared/logs/stop_training.flag')
 NEXT_TRAINING_FILE = os.getenv('NEXT_TRAINING_FILE', '/shared/logs/next_training.json')
 REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379')
 REDIS_CHANNEL = os.getenv('REDIS_CHANNEL', 'training_logs')

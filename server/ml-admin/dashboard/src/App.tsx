@@ -18,6 +18,10 @@ import { TrainingLogs } from './components/TrainingLogs';
 import { MLServiceStatus } from './components/MLServiceStatus';
 import { CBServiceStatus } from './components/CBServiceStatus';
 import { AlgorithmSelector } from './components/AlgorithmSelector';
+import { MetricsCard } from './components/MetricsCard';
+import { MetricsComparison } from './components/MetricsComparison';
+import { DataGenerator } from './components/DataGenerator';
+import { DatasetUploader } from './components/DatasetUploader';
 import { AlgorithmProvider, useAlgorithm } from './contexts/AlgorithmContext';
 
 const darkTheme = createTheme({
@@ -74,6 +78,26 @@ const AppContent: React.FC = () => {
             <TrainingLogs />
           </Grid>
         )}
+
+        {/* Data Generator */}
+        <Grid size={12}>
+          <DataGenerator />
+        </Grid>
+
+        {/* Dataset Uploader */}
+        <Grid size={12}>
+          <DatasetUploader />
+        </Grid>
+
+        {/* Metrics Section */}
+        <Grid size={12}>
+          <MetricsCard />
+        </Grid>
+
+        {/* Metrics Comparison */}
+        <Grid size={12}>
+          <MetricsComparison />
+        </Grid>
       </Grid>
 
       <Box mt={4} textAlign="center">
@@ -88,24 +112,24 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <AlgorithmProvider>
-      <ThemeProvider theme={darkTheme}>
-        <CssBaseline />
-        <Box sx={{ flexGrow: 1 }}>
-          <AppBar position="static">
-            <Toolbar>
-              <Psychology sx={{ mr: 2 }} />
-              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                TeamUp ML Admin Dashboard
-              </Typography>
-              <Typography variant="body2" color="inherit">
-                v1.0.0
-              </Typography>
-            </Toolbar>
-          </AppBar>
+    <ThemeProvider theme={darkTheme}>
+      <CssBaseline />
+      <Box sx={{ flexGrow: 1 }}>
+        <AppBar position="static">
+          <Toolbar>
+            <Psychology sx={{ mr: 2 }} />
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              TeamUp ML Admin Dashboard
+            </Typography>
+            <Typography variant="body2" color="inherit">
+              v1.0.0
+            </Typography>
+          </Toolbar>
+        </AppBar>
 
           <AppContent />
-        </Box>
-      </ThemeProvider>
+      </Box>
+    </ThemeProvider>
     </AlgorithmProvider>
   );
 }

@@ -130,6 +130,11 @@ def train_model():
         users = load_users_from_db()
         inter = load_interactions_from_db()
 
+        # Explicit check for empty database
+        if len(users) == 0:
+            logger.warning("No users found in database. Skipping training.")
+            return False
+
         if len(users) < TrainingConfig.MIN_USERS:
             logger.warning(f"Not enough users ({len(users)} < {TrainingConfig.MIN_USERS}). Skipping training.")
             return False

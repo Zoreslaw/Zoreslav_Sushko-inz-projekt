@@ -8,6 +8,13 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configure form options for file uploads (10MB limit)
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 10_000_000;
+    options.ValueLengthLimit = 10_000_000;
+});
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -24,6 +31,8 @@ builder.Services.AddHttpClient<CBServiceClient>(client =>
 });
 
 builder.Services.AddSingleton<AlgorithmService>();
+builder.Services.AddScoped<MetricsService>();
+builder.Services.AddScoped<CsvImportService>();
 
 builder.Services.AddCors(options =>
 {

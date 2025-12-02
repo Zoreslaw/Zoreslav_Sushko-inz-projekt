@@ -158,37 +158,37 @@ export const ModelInfoCard: React.FC = () => {
               </>
             ) : (
               <>
-                <Box display="flex" alignItems="center" mb={1}>
-                  <Storage sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Size: <strong>{modelInfo.size_mb} MB</strong>
-                  </Typography>
-                </Box>
+            <Box display="flex" alignItems="center" mb={1}>
+              <Storage sx={{ mr: 1, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                Size: <strong>{modelInfo.size_mb} MB</strong>
+              </Typography>
+            </Box>
 
-                <Box display="flex" alignItems="center" mb={1}>
-                  <AccessTime sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Last Modified:{' '}
-                    <strong>
-                      {new Date(modelInfo.last_modified!).toLocaleString()}
-                    </strong>
-                  </Typography>
-                </Box>
+            <Box display="flex" alignItems="center" mb={1}>
+              <AccessTime sx={{ mr: 1, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                Last Modified:{' '}
+                <strong>
+                  {new Date(modelInfo.last_modified!).toLocaleString()}
+                </strong>
+              </Typography>
+            </Box>
 
-                <Box display="flex" alignItems="center">
-                  <AccessTime sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Age: <strong>{modelInfo.age_hours?.toFixed(1)} hours</strong>
-                  </Typography>
-                </Box>
+            <Box display="flex" alignItems="center">
+              <AccessTime sx={{ mr: 1, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                Age: <strong>{modelInfo.age_hours?.toFixed(1)} hours</strong>
+              </Typography>
+            </Box>
 
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 2, display: 'block', wordBreak: 'break-all' }}
-                >
-                  Path: {modelInfo.path}
-                </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 2, display: 'block', wordBreak: 'break-all' }}
+            >
+              Path: {modelInfo.path}
+            </Typography>
               </>
             )}
           </Box>

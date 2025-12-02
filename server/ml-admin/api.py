@@ -8,7 +8,7 @@ import os
 import json
 import time
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional
 
@@ -40,6 +40,7 @@ SSE_BLOCK_MS = int(os.getenv('SSE_BLOCK_MS', '1000'))  # XREAD block ms
 # App
 # -----------------------------------
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
 CORS(app, supports_credentials=True)
 
 # -----------------------------------
@@ -335,6 +336,78 @@ def set_algorithm():
     except Exception as e:
         return jsonify({'error': str(e)}), 503
 
+@app.post('/api/metrics/<user_id>')
+def calculate_user_metrics(user_id):
+    """Proxy to backend API to calculate metrics for a user."""
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/metrics/{user_id}',
+            json=data,
+            timeout=30,
+            headers={'Content-Type': 'application/json'}
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.get('/api/metrics/aggregate')
+def get_aggregate_metrics():
+    """Proxy to backend API to get aggregate metrics."""
+    try:
+        algorithm = request.args.get('algorithm')
+        k_values = request.args.getlist('kValues', type=int)
+        params = {}
+        if algorithm:
+            params['algorithm'] = algorithm
+        if k_values:
+            params['kValues'] = k_values
+        
+        r = requests.get(
+            f'{BACKEND_URL}/api/users/metrics/aggregate',
+            params=params,
+            timeout=60
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/generate-interactions')
+def generate_interactions():
+    """Proxy to backend API to generate random user interactions."""
+    try:
+        count = request.args.get('count', default=50, type=int)
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/generate-interactions',
+            params={'count': count},
+            timeout=60
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/upload-dataset')
+def upload_dataset():
+    """Proxy to backend API to upload CSV dataset."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Forward the file to backend
+        files = {'file': (file.filename, file.stream, file.content_type)}
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/upload-dataset',
+            files=files,
+            timeout=300  # 5 minutes for large files
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
 @app.get('/api/stats')
 def get_stats():
     import psycopg2
@@ -361,7 +434,8 @@ def get_stats():
         row = cur.fetchone()
         total_likes = row['total_likes']
         total_dislikes = row['total_dislikes']
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
 
         return jsonify({
             'total_users': total_users,

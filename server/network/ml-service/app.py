@@ -8,6 +8,7 @@ Refactor: safer feature building & batch embed shapes.
 import os
 import sys
 import logging
+import math
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -179,6 +180,77 @@ def model_info():
 
 @app.errorhandler(404)
 def nf(e): return jsonify({'error': 'Endpoint not found'}), 404
+
+@app.post('/ml/metrics')
+def calculate_metrics():
+    """Calculate recommendation metrics (internal use, called by backend)."""
+    try:
+        data = request.get_json() or {}
+        recommended_ids = data.get('recommendedIds', [])
+        ground_truth = set(data.get('groundTruth', []))
+        mutual_accepts = set(data.get('mutualAccepts', []))
+        chat_starts = set(data.get('chatStarts', []))
+        k_values = data.get('kValues', [5, 10, 20])
+        
+        if not recommended_ids:
+            return jsonify({'error': 'recommendedIds is required'}), 400
+        
+        # Import metrics calculation (simple implementation)
+        def precision_at_k(rec, rel, k):
+            if k == 0: return 0.0
+            top_k = rec[:k]
+            return sum(1 for uid in top_k if uid in rel) / k
+        
+        def recall_at_k(rec, rel, k):
+            if len(rel) == 0: return 0.0
+            top_k = rec[:k]
+            return sum(1 for uid in top_k if uid in rel) / len(rel)
+        
+        def ndcg_at_k(rec, rel, k):
+            if len(rel) == 0: return 0.0
+            def dcg(ranking, rel_set, k_val):
+                score = 0.0
+                for i, uid in enumerate(ranking[:k_val], start=1):
+                    if uid in rel_set:
+                        score += 1.0 / math.log2(i + 1)
+                return score
+            def idcg(num_rel, k_val):
+                if num_rel == 0: return 0.0
+                score = 0.0
+                for i in range(1, min(num_rel, k_val) + 1):
+                    score += 1.0 / math.log2(i + 1)
+                return score
+            dcg_val = dcg(rec, rel, k)
+            idcg_val = idcg(len(rel), k)
+            return dcg_val / idcg_val if idcg_val > 0 else 0.0
+        
+        def hit_rate_at_k(rec, rel, k):
+            if len(rel) == 0: return 0.0
+            return 1.0 if any(uid in rel for uid in rec[:k]) else 0.0
+        
+        results = {
+            "precision": {},
+            "recall": {},
+            "ndcg": {},
+            "hit_rate": {},
+            "mutual_accept_rate": {},
+            "chat_start_rate": {}
+        }
+        
+        for k in k_values:
+            results["precision"][k] = precision_at_k(recommended_ids, ground_truth, k)
+            results["recall"][k] = recall_at_k(recommended_ids, ground_truth, k)
+            results["ndcg"][k] = ndcg_at_k(recommended_ids, ground_truth, k)
+            results["hit_rate"][k] = hit_rate_at_k(recommended_ids, ground_truth, k)
+            
+            top_k_set = set(recommended_ids[:k])
+            results["mutual_accept_rate"][k] = len(top_k_set & mutual_accepts) / k if k > 0 else 0.0
+            results["chat_start_rate"][k] = len(top_k_set & chat_starts) / k if k > 0 else 0.0
+        
+        return jsonify(results), 200
+    except Exception as e:
+        logger.error("Error in /ml/metrics", exc_info=True)
+        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
 
 @app.errorhandler(500)
 def ie(e):

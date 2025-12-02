@@ -186,6 +186,48 @@ export const mlAdminApi = {
     return fetchJSON('/api/algorithm', 'POST', { algorithm });
   },
 
+  // ---- Metrics ----
+  async calculateUserMetrics(
+    userId: string,
+    kValues: number[] = [5, 10, 20]
+  ): Promise<any> {
+    return fetchJSON(`/api/metrics/${userId}`, 'POST', { kValues });
+  },
+
+  async getAggregateMetrics(
+    algorithm?: string,
+    kValues: number[] = [5, 10, 20]
+  ): Promise<any> {
+    const params = new URLSearchParams();
+    if (algorithm) params.append('algorithm', algorithm);
+    kValues.forEach(k => params.append('kValues', k.toString()));
+    const query = params.toString();
+    return fetchJSON(`/api/metrics/aggregate${query ? `?${query}` : ''}`, 'GET');
+  },
+
+  async generateInteractions(count: number = 100): Promise<any> {
+    return fetchJSON(`/api/users/generate-interactions?count=${count}`, 'POST');
+  },
+
+  async uploadDataset(formData: FormData): Promise<any> {
+    const baseUrl = (import.meta as any)?.env?.VITE_ADMIN_API_URL?.replace(/\/+$/, '') || '';
+    const url = `${baseUrl}/api/users/upload-dataset`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      const msg = body?.error || body?.message || `HTTP ${response.status}`;
+      throw new ApiError(msg, response.status, body);
+    }
+
+    return await response.json();
+  },
+
   // ---- Low-level utilities ----
   ApiError,
 };

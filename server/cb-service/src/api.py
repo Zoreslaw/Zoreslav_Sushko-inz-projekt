@@ -215,6 +215,42 @@ async def model_info():
         "users_fitted": len(users_cache)
     }
 
+@app.post("/ml/metrics")
+async def calculate_metrics_endpoint(request: Dict[str, Any]):
+    """Calculate recommendation metrics (internal use, called by backend)."""
+    from src.metrics import calculate_metrics, calculate_product_metrics
+    
+    try:
+        recommended_ids = request.get("recommendedIds", [])
+        ground_truth = set(request.get("groundTruth", []))
+        mutual_accepts = set(request.get("mutualAccepts", []))
+        chat_starts = set(request.get("chatStarts", []))
+        k_values = request.get("kValues", [5, 10, 20])
+        
+        if not recommended_ids:
+            raise HTTPException(status_code=400, detail="recommendedIds is required")
+        
+        # Calculate recommendation metrics
+        rec_metrics = calculate_metrics(recommended_ids, ground_truth, k_values)
+        
+        # Calculate product metrics
+        prod_metrics = calculate_product_metrics(
+            recommended_ids, mutual_accepts, chat_starts, k_values
+        )
+        
+        # Combine results
+        return {
+            "precision": rec_metrics["precision"],
+            "recall": rec_metrics["recall"],
+            "ndcg": rec_metrics["ndcg"],
+            "hit_rate": rec_metrics["hit_rate"],
+            "mutual_accept_rate": prod_metrics["mutual_accept_rate"],
+            "chat_start_rate": prod_metrics["chat_start_rate"]
+        }
+    except Exception as e:
+        logger.error(f"[api] Error calculating metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error calculating metrics: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5001)

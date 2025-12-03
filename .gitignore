@@ -628,3 +628,6 @@ praca*.docx
 !*.example
 !*.template
 !*.sample
+
+# Exception for Gradle wrapper
+!client/android/gradle/wrapper/gradle-wrapper.jar

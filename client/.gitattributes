@@ -1,0 +1,6 @@
+# Treat JAR files as binary
+*.jar binary
+
+# Ensure gradlew script has LF line endings
+android/gradlew text eol=lf
+

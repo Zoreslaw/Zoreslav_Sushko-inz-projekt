@@ -60,6 +60,7 @@ class ContentBasedRecommender:
             logger.warning("[recommender] target_user=%s produced empty vector", target_user.id)
             return []
         
+        #
         # Filter candidates - first try strict eligibility, then relax if needed
         elig = make_eligibility_filter(target_user)
         users_filtered = [u for u in candidates if u.id != target_user.id and elig(u)]

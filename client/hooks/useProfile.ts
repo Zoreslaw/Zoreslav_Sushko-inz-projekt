@@ -1,13 +1,8 @@
-import { useEffect, useState } from 'react';
-import {
-  getFirestore,
-  doc as docRef,
-  onSnapshot,
-  updateDoc,
-} from '@react-native-firebase/firestore';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { api, UserProfile } from '@/services/api';
 
-export interface UserProfile {
+export interface ProfileData {
   avatarUrl: string;
   userName: string;
   favoriteCategory: string;
@@ -23,8 +18,8 @@ export interface UserProfile {
   otherGames: string[];
 }
 
-export interface UserProfileUpdate {
-  photoURL?: string;
+export interface ProfileUpdate {
+  photoUrl?: string;
   displayName?: string;
   favoriteCategory?: string;
   languages?: string[];
@@ -40,17 +35,18 @@ export interface UserProfileUpdate {
 }
 
 interface UseProfileResult {
-  profile: UserProfile;
+  profile: ProfileData;
   loading: boolean;
   error: string | null;
-  updateProfile: (updates: UserProfileUpdate) => Promise<void>;
+  updateProfile: (updates: ProfileUpdate) => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 export function useProfile(): UseProfileResult {
   const { user } = useAuth();
-  const [profile, setProfile] = useState<UserProfile>({
+  const [profile, setProfile] = useState<ProfileData>({
     avatarUrl: '',
-    userName: '' ,
+    userName: '',
     favoriteCategory: '',
     languages: [],
     age: null,
@@ -65,126 +61,116 @@ export function useProfile(): UseProfileResult {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const db = getFirestore();
 
-  const updateProfile = async (updates : UserProfileUpdate) => {
+  const fetchProfile = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await api.getProfile();
+      
+      // Convert API response to ProfileData format
+      const preferredAgeRange = new Map<string, number>();
+      if (data.preferenceAgeMin !== undefined) {
+        preferredAgeRange.set('min', data.preferenceAgeMin);
+      }
+      if (data.preferenceAgeMax !== undefined) {
+        preferredAgeRange.set('max', data.preferenceAgeMax);
+      }
+
+      setProfile({
+        avatarUrl: data.photoUrl || '',
+        userName: data.displayName || 'NoName',
+        favoriteCategory: data.favoriteCategory || '',
+        languages: data.languages || [],
+        age: data.age || null,
+        gender: data.gender || '',
+        description: data.description || '',
+        preferredCategories: data.preferenceCategories || [],
+        preferredLanguages: data.preferenceLanguages || [],
+        preferredAgeRange,
+        preferredGender: data.preferenceGender || '',
+        favoriteGames: data.favoriteGames || [],
+        otherGames: data.otherGames || [],
+      });
+    } catch (err: any) {
+      console.error('Error fetching profile:', err);
+      setError(err.message || 'Failed to fetch profile');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const updateProfile = async (updates: ProfileUpdate) => {
     if (!user) {
       throw new Error('User not authenticated');
     }
-    try {
-      const updatePayload: any = {};
 
-      if (updates.photoURL !== undefined) {
-        updatePayload.photoURL = updates.photoURL;
+    try {
+      // Convert ProfileUpdate to API format
+      const apiUpdates: Partial<UserProfile> = {};
+
+      if (updates.photoUrl !== undefined) {
+        apiUpdates.photoUrl = updates.photoUrl;
       }
       if (updates.displayName !== undefined) {
-        updatePayload.displayName = updates.displayName;
+        apiUpdates.displayName = updates.displayName;
       }
       if (updates.favoriteCategory !== undefined) {
-        updatePayload.favoriteCategory = updates.favoriteCategory;
+        apiUpdates.favoriteCategory = updates.favoriteCategory;
       }
       if (updates.languages !== undefined) {
-        updatePayload.languages = updates.languages;
+        apiUpdates.languages = updates.languages;
       }
       if (updates.age !== undefined) {
-        updatePayload.age = (updates.age === '') ? null : Number(updates.age);
+        apiUpdates.age = updates.age === '' ? 0 : Number(updates.age);
       }
       if (updates.gender !== undefined) {
-        updatePayload.gender = updates.gender;
+        apiUpdates.gender = updates.gender;
       }
       if (updates.description !== undefined) {
-        updatePayload.description = updates.description;
+        apiUpdates.description = updates.description;
       }
       if (updates.preferenceCategories !== undefined) {
-        updatePayload.preferenceCategories = updates.preferenceCategories;
+        apiUpdates.preferenceCategories = updates.preferenceCategories;
       }
       if (updates.preferenceLanguages !== undefined) {
-        updatePayload.preferenceLanguages = updates.preferenceLanguages;
+        apiUpdates.preferenceLanguages = updates.preferenceLanguages;
       }
       if (updates.preferenceAgeRange instanceof Map) {
-        updatePayload.preferenceAgeRange = Object.fromEntries(updates.preferenceAgeRange);
+        apiUpdates.preferenceAgeMin = updates.preferenceAgeRange.get('min');
+        apiUpdates.preferenceAgeMax = updates.preferenceAgeRange.get('max');
       }
       if (updates.preferenceGender !== undefined) {
-        updatePayload.preferenceGender = updates.preferenceGender;
+        apiUpdates.preferenceGender = updates.preferenceGender;
       }
       if (updates.favoriteGames !== undefined) {
-        updatePayload.favoriteGames = updates.favoriteGames;
+        apiUpdates.favoriteGames = updates.favoriteGames;
       }
       if (updates.otherGames !== undefined) {
-        updatePayload.otherGames = updates.otherGames;
+        apiUpdates.otherGames = updates.otherGames;
       }
 
-      const ref = docRef(db, 'users', user.uid);
-      await updateDoc(ref, updatePayload);
-      console.log('Profile updated successfully:', updatePayload);
+      const updatedProfile = await api.updateProfile(apiUpdates);
+      console.log('Profile updated successfully:', updatedProfile);
+
+      // Refresh profile to get latest data
+      await fetchProfile();
     } catch (err: any) {
       console.error('Error updating profile:', err);
       throw err;
     }
   };
 
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const userDocRef = docRef(db, 'users', user.uid)
-    
-    const unsubscribe = onSnapshot(
-      userDocRef,
-      (snap) => {
-        try {
-          if (!snap.exists) {
-            setError('User does not exist');
-            setLoading(false);
-            return;
-          }
-
-          const userData = snap.data() || {};
-          const url = userData.photoURL || '';
-          const name = userData.displayName || 'NoName';
-          const favoriteCategory = userData.favoriteCategory || '';
-          const languages = userData.languages || [];
-          const age = userData.age || null;
-          const gender = userData.gender || '';
-          const description = userData.description || '';
-          const preferredCategories = userData.preferenceCategories || [];
-          const preferredLanguages = userData.preferenceLanguages || [];
-          const preferredAgeRangeRaw = userData.preferenceAgeRange || {};
-          const preferredAgeRange = new Map<string, number>(Object.entries(preferredAgeRangeRaw));
-          const preferredGender = userData.preferenceGender || '';
-          const favoriteGames = userData.favoriteGames || [];
-          const otherGames = userData.otherGames || [];
-          setProfile({
-            avatarUrl: url,
-            userName: name,
-            favoriteCategory: favoriteCategory,
-            languages: languages,
-            age: age,
-            gender: gender,
-            description: description,
-            preferredCategories: preferredCategories,
-            preferredLanguages: preferredLanguages,
-            preferredAgeRange: preferredAgeRange,
-            preferredGender: preferredGender,
-            favoriteGames: favoriteGames,
-            otherGames: otherGames,
-          });
-          setLoading(false);
-        } catch (err: any) {
-          setError(err.message);
-          setLoading(false);
-        }
-      },
-      (err) => {
-        setError(err.message);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, db]);
-
-  return { profile, loading, error, updateProfile };
+  return { profile, loading, error, updateProfile, refresh: fetchProfile };
 }
+

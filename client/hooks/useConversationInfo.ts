@@ -1,79 +1,63 @@
-import { useEffect, useState } from 'react';
-import {
-  getFirestore,
-  doc as docRef,
-  onSnapshot,
-  getDoc,
-} from '@react-native-firebase/firestore';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { api } from '@/services/api';
 
 interface UseConversationInfoResult {
-  otherUserName: string; 
+  otherUserName: string;
+  otherUserId: string;
+  otherUserPhotoUrl?: string;
+  otherUserOnline: boolean;
   loading: boolean;
   error: string | null;
 }
 
 /**
- * Hook to fetch the conversation doc and the "other" user's name, for a 1-on-1 chat.
+ * Hook to fetch the conversation info and the "other" user's details for a 1-on-1 chat.
  */
 export function useConversationInfo(conversationId: string): UseConversationInfoResult {
   const { user } = useAuth();
   const [otherUserName, setOtherUserName] = useState('Unknown');
+  const [otherUserId, setOtherUserId] = useState('');
+  const [otherUserPhotoUrl, setOtherUserPhotoUrl] = useState<string | undefined>();
+  const [otherUserOnline, setOtherUserOnline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!conversationId) {
+  const fetchConversationInfo = useCallback(async () => {
+    if (!conversationId || !user) {
       setLoading(false);
       return;
     }
-    const db = getFirestore();
-    const conversationDocRef = docRef(db, 'conversations', conversationId);
 
-    const unsubscribe = onSnapshot(
-      conversationDocRef,
-      async (snap) => {
-        try {
-          if (!snap.exists) {
-            setError('Conversation does not exist');
-            setLoading(false);
-            return;
-          }
+    try {
+      setLoading(true);
+      const conversation = await api.getConversation(conversationId);
 
-          const data = snap.data() || {};
-          const participantIds: string[] = data.participantIds || [];
-
-          const otherUid = participantIds.find((uid) => uid !== user?.uid);
-          if (!otherUid) {
-            setOtherUserName('Anonymous');
-            setLoading(false);
-            return;
-          }
-
-          const userDocRef = docRef(db, 'users', otherUid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists) {
-            const userData = userDocSnap.data() || {};
-            const name = userData.displayName || 'NoName';
-            setOtherUserName(name);
-          } else {
-            setOtherUserName('Unknown User');
-          }
-
-          setLoading(false);
-        } catch (err: any) {
-          setError(err.message);
-          setLoading(false);
-        }
-      },
-      (err) => {
-        setError(err.message);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
+      setOtherUserName(conversation.otherUserName || 'Unknown');
+      setOtherUserId(conversation.otherUserId);
+      setOtherUserPhotoUrl(conversation.otherUserPhotoUrl);
+      setOtherUserOnline(conversation.otherUserOnline);
+      setError(null);
+    } catch (err: any) {
+      console.error('Error fetching conversation info:', err);
+      setError(err.message || 'Failed to fetch conversation info');
+      setOtherUserName('Unknown');
+    } finally {
+      setLoading(false);
+    }
   }, [conversationId, user]);
 
-  return { otherUserName, loading, error };
+  useEffect(() => {
+    fetchConversationInfo();
+  }, [fetchConversationInfo]);
+
+  return {
+    otherUserName,
+    otherUserId,
+    otherUserPhotoUrl,
+    otherUserOnline,
+    loading,
+    error,
+  };
 }
+

@@ -159,7 +159,7 @@ function Invoke-Init {
     Write-Host ""
     Write-Host "Services available:" -ForegroundColor Cyan
     Write-Host "  ML Service:  http://localhost:5000" -ForegroundColor White
-    Write-Host "  PostgreSQL:  localhost:5432" -ForegroundColor White
+    Write-Host "  PostgreSQL:  localhost:5433" -ForegroundColor White
     Write-Host "  Redis:       localhost:6379" -ForegroundColor White
     Write-Host ""
 }

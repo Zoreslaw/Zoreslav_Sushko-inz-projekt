@@ -1,70 +1,52 @@
-import {
-    getFirestore,
-    doc as docRef,
-    updateDoc,
-    arrayUnion,
-  } from '@react-native-firebase/firestore';
-  import { createOrGetConversation } from '@/utils/createOrGetConversation'; 
-  // The function you shared
-  
-  /**
-   * A custom hook that returns two functions:
-   *   likeUser(swipedUser, isMatch?)
-   *   dislikeUser(swipedUser)
-   *
-   * Each updates Firestore, optionally creates a conversation if matched.
-   *
-   * Usage:
-   *   const { likeUser, dislikeUser } = useSwipeActions(currentUserId);
-   *   ...
-   *   await likeUser(swipedUser, true); // if "isMatch" is known
-   */
-  export function useSwipeActions(currentUserId?: string) {
-    const db = getFirestore();
-  
-    // "Like" a user
-    async function likeUser(
-      swipedUser: { id: string; isMatch?: boolean },
-      isMatch?: boolean
-    ) {
-      if (!currentUserId || !swipedUser?.id) return;
-  
-      // 1) Update the current user's "liked" array
-      await updateDoc(docRef(db, 'users', currentUserId), {
-        liked: arrayUnion(swipedUser.id),
-      });
-  
-      // 2) If we know it's a match (or "isMatch" is true),
-      //    create/fetch a conversation.
-      //    You might do more logic: check if other user has liked current user, etc.
-      console.log('isMatch', isMatch);
-      if (isMatch) {
-        await handleMatch(currentUserId, swipedUser.id);
+import { api } from '@/services/api';
+
+// /**
+//  * A custom hook that returns two functions:
+//  *   likeUser(targetUserId, isMatch?)
+//  *   dislikeUser(targetUserId)
+//  *
+//  * Each calls the backend API to record the swipe action.
+//  * If it's a match, a conversation is automatically created.
+//  *
+//  * Usage:
+//  *   const { likeUser, dislikeUser } = useSwipeActions(currentUserId);
+//  *   const result = await likeUser(targetUserId);
+//  *   if (result?.isMatch) { /* handle match */ }
+//  */
+export function useSwipeActions(currentUserId?: string) {
+  // "Like" a user
+  async function likeUser(swipedUser: { id: string; isMatch?: boolean }) {
+    if (!currentUserId || !swipedUser?.id) return null;
+
+    try {
+      const result = await api.likeUser(swipedUser.id);
+      console.log('Like result:', result);
+      
+      if (result.isMatch) {
+        console.log('It\'s a match! Conversation:', result.conversationId);
       }
+
+      return result;
+    } catch (err) {
+      console.error('Error liking user:', err);
+      return null;
     }
-  
-    // "Dislike" a user
-    async function dislikeUser(swipedUser: { id: string }) {
-      if (!currentUserId || !swipedUser?.id) return;
-  
-      // Update the current user's "disliked" array
-      await updateDoc(docRef(db, 'users', currentUserId), {
-        disliked: arrayUnion(swipedUser.id),
-      });
-    }
-  
-    // Helper that calls createOrGetConversation
-    async function handleMatch(userA: string, userB: string) {
-      try {
-        const conversationId = await createOrGetConversation(userA, userB);
-        console.log('Conversation created/fetched: ', conversationId);
-        // You could do any side effects here
-        // e.g. return conversationId if the caller needs it
-      } catch (err) {
-        console.error('Error creating/fetching conversation:', err);
-      }
-    }
-  
-    return { likeUser, dislikeUser };
   }
-  
+
+  // "Dislike" a user
+  async function dislikeUser(swipedUser: { id: string }) {
+    if (!currentUserId || !swipedUser?.id) return null;
+
+    try {
+      const result = await api.dislikeUser(swipedUser.id);
+      console.log('Dislike result:', result);
+      return result;
+    } catch (err) {
+      console.error('Error disliking user:', err);
+      return null;
+    }
+  }
+
+  return { likeUser, dislikeUser };
+}
+

@@ -75,7 +75,7 @@ init: build up migrate seed ## Initialize entire stack (first time setup)
 	@echo "✅ Stack initialized successfully!"
 	@echo "Backend API: http://localhost:8080"
 	@echo "ML Service: http://localhost:5000"
-	@echo "PostgreSQL: localhost:5432"
+	@echo "PostgreSQL: localhost:5433"
 	@echo "Redis: localhost:6379"
 
 rebuild: down clean build up ## Rebuild and restart everything

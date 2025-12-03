@@ -2,19 +2,26 @@ export default interface User {
   id: string;
   displayName: string;
   email: string;
-  photoURL: string;
-  createdAt: Date;
+  photoUrl?: string; // Changed from photoURL to match backend
+  createdAt: string; // Changed from Date to string (ISO date)
 
   languages: string[];
   age: number;
-  gender: "Male" | "Female" | "Other";
+  gender: string; // Changed from union type to string
   favoriteGames: string[];
   otherGames: string[];
   preferenceCategories: string[];
   preferenceLanguages: string[];
-  preferenceAgeRange: { min: number; max: number };
-  preferenceGender: "Male" | "Female" | "Other" | "Any";
+  preferenceAgeMin?: number;
+  preferenceAgeMax?: number;
+  preferenceGender?: string;
+  favoriteCategory?: string;
   description?: string;
   liked?: string[];
   disliked?: string[];
+}
+
+// For compatibility with components using photoURL
+export interface UserWithPhotoURL extends Omit<User, 'photoUrl'> {
+  photoURL?: string;
 }

@@ -47,6 +47,7 @@ npm start
 - Physical device: Scan QR code with Expo Go
 
 Configure API endpoint in `client/config/constants.ts`:
+
 - Emulator/simulator: `http://localhost:5001`
 - Physical device: `http://YOUR_IP:5001`
 
@@ -54,19 +55,20 @@ Configure API endpoint in `client/config/constants.ts`:
 
 After successful deployment, the following services are accessible:
 
-| Service | URL | Description |
-|--------|-----|-------------|
-| Backend API | http://localhost:5001 | Main REST API |
-| Swagger | http://localhost:5001/swagger | API documentation |
-| ML Service | http://localhost:5000 | Two-Tower neural network service |
-| CB Service | http://localhost:5002 | Content-Based recommendation service |
-| ML Admin Dashboard | http://localhost:3000 | Monitoring and algorithm selection |
-| ML Admin API | http://localhost:6000 | ML administration API |
-| pgAdmin | http://localhost:5050 | Database management |
-| PostgreSQL | localhost:5432 | Database |
-| Redis | localhost:6379 | Cache |
+| Service            | URL                           | Description                          |
+| ------------------ | ----------------------------- | ------------------------------------ |
+| Backend API        | http://localhost:5001         | Main REST API                        |
+| Swagger            | http://localhost:5001/swagger | API documentation                    |
+| ML Service         | http://localhost:5000         | Two-Tower neural network service     |
+| CB Service         | http://localhost:5002         | Content-Based recommendation service |
+| ML Admin Dashboard | http://localhost:3000         | Monitoring and algorithm selection   |
+| ML Admin API       | http://localhost:6000         | ML administration API                |
+| pgAdmin            | http://localhost:5050         | Database management                  |
+| PostgreSQL         | localhost:5433                | Database                             |
+| Redis              | localhost:6379                | Cache                                |
 
 **pgAdmin Access Credentials:**
+
 - Email: `admin@admin.com`
 - Password: `admin`
 
@@ -87,7 +89,7 @@ curl http://localhost:5001/api/users/algorithm
 curl -X POST http://localhost:5001/api/users/algorithm -H "Content-Type: application/json" -d '{"algorithm": "ContentBased"}'
 ```
 
-Access Swagger UI: http://localhost:5001/swagger  
+Access Swagger UI: http://localhost:5001/swagger
 Access ML Admin Dashboard: http://localhost:3000
 
 ## Project Structure
@@ -130,16 +132,19 @@ TeamUpProject/
 ### Algorithm Selection
 
 Two recommendation algorithms available:
+
 - **TwoTower**: Neural network (default)
 - **ContentBased**: Feature-based similarity
 
 Change via:
+
 - Dashboard: http://localhost:3000
 - API: `POST /api/users/algorithm` with `{"algorithm": "TwoTower"}` or `{"algorithm": "ContentBased"}`
 
 ### ML Training
 
 Configured in `server/docker-compose.yml`:
+
 - Training interval: 8 hours
 - Min users: 10
 - Min interactions: 5
@@ -165,11 +170,14 @@ docker-compose ps
 ## Database Access
 
 **pgAdmin:** http://localhost:5050
+
 - Email: `admin@admin.com`
 - Password: `admin`
-- Server: `postgres:5432`, Database: `teamup`, User: `teamup_user`, Password: `teamup_password`
+- Server: `postgres:5432` (from pgAdmin inside Docker), or `localhost:5433` (from host)
+- Database: `teamup`, User: `teamup_user`, Password: `teamup_password`
 
 **Command line:**
+
 ```bash
 docker exec -it teamup-postgres psql -U teamup_user -d teamup
 ```
@@ -179,6 +187,7 @@ docker exec -it teamup-postgres psql -U teamup_user -d teamup
 Automatic training: every 8 hours (min 10 users, 5 interactions)
 
 Manual trigger:
+
 ```bash
 curl -X POST http://localhost:6000/api/training/trigger
 ```
@@ -255,6 +264,7 @@ docker-compose up --build
 ## Development
 
 **Backend:**
+
 ```bash
 docker-compose build backend
 docker-compose restart backend

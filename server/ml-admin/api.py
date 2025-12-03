@@ -444,7 +444,7 @@ def get_stats():
     try:
         conn = psycopg2.connect(
             host=os.getenv('DB_HOST', 'postgres'),
-            port=os.getenv('DB_PORT', '5432'),
+            port=os.getenv('DB_PORT', '5433'),
             database=os.getenv('DB_NAME', 'teamup'),
             user=os.getenv('DB_USER', 'teamup_user'),
             password=os.getenv('DB_PASSWORD', 'teamup_password'),

@@ -65,3 +65,4 @@ public class SetPresenceRequest
     public bool IsOnline { get; set; }
 }
 
+

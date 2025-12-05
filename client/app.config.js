@@ -31,7 +31,7 @@ export default {
         // foregroundImage: "./assets/images/book_icon.png",
         backgroundColor: "#232323",
       },
-      googleServicesFile: "./configs/google-services.json",
+      googleServicesFile: "./android/app/google-services.json",
       package: "com.umaps.teamup",
       package_name: "com.umaps.teamup",
     },

@@ -122,7 +122,7 @@ services:
     container_name: teamup-ml-admin-api
     environment:
       DB_HOST: postgres
-      DB_PORT: 5433
+      DB_PORT: 5432
       DB_NAME: teamup
       DB_USER: teamup_user
       DB_PASSWORD: teamup_password

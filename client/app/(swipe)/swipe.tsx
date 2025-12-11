@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
-import { getFirestore, doc, updateDoc, arrayUnion } from '@react-native-firebase/firestore';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useGetMatch } from '@/hooks/useGetMatch';
@@ -17,12 +16,11 @@ import { useSwipeActions } from '@/hooks/useSwipeActions';
 
 export default function SwipeScreen() {
   const { user } = useAuth();
-  const { cards, isLoading } = useGetMatch(user?.uid ?? '');
-  const db = getFirestore();
+  const { cards, isLoading, error } = useGetMatch(user?.userId ?? '');
   const backgroundColor = useThemeColor({}, 'background');
   const router = useRouter();
 
-  const { likeUser, dislikeUser } = useSwipeActions(user?.uid);
+  const { likeUser, dislikeUser } = useSwipeActions(user?.userId);
 
   const swiperRef = useRef<Swiper<any>>(null);
   const [allCardsFinished, setAllCardsFinished] = useState(false);
@@ -33,14 +31,16 @@ export default function SwipeScreen() {
   // Called when user swipes right
   const handleSwipedRight = async (cardIndex: number) => {
     if (!cards || !user) return;
-    const swipedUser = cards[cardIndex]?.user;
-    const isMatch = swipedUser?.liked.includes(user.uid);
+    const swipedCard = cards[cardIndex];
+    const swipedUser = swipedCard?.user;
     if (!swipedUser?.id) return;
 
     try {
-      await likeUser({ id: swipedUser.id, isMatch: isMatch }, isMatch);
+      console.log('Liking user:', swipedUser.id);
+      const result = await likeUser({ id: swipedUser.id, isMatch: swipedUser.isMatch });
 
-      if (isMatch) {
+      if (result?.isMatch) {
+        console.log('It\'s a match!');
         setMatchedUser(swipedUser);
         setShowMatch(true);
       }
@@ -52,10 +52,12 @@ export default function SwipeScreen() {
   // Called when user swipes left
   const handleSwipedLeft = async (cardIndex: number) => {
     if (!cards || !user) return;
-    const swipedUser = cards[cardIndex]?.user;
+    const swipedCard = cards[cardIndex];
+    const swipedUser = swipedCard?.user;
     if (!swipedUser?.id) return;
 
     try {
+      console.log('Disliking user:', swipedUser.id);
       await dislikeUser({ id: swipedUser.id });
     } catch (error) {
       console.error('Error updating dislike status:', error);
@@ -96,6 +98,29 @@ export default function SwipeScreen() {
           <Text style={styles.noUsersText}>
             Finding matches for you...
           </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Show error if there's one
+  if (error) {
+    return (
+      <View style={[styles.container, { backgroundColor }]}>
+        <SwipeTopBar
+          onLeftPress={handleClosePress}
+          onRightPress={() => console.log('Top Right Pressed')}
+        />
+        <View style={styles.noUsersContainer}>
+          <Text style={styles.noUsersText}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={styles.goHomeButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.goHomeButtonText}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );

@@ -15,12 +15,6 @@ public class LoginRequest
     public string Password { get; set; } = string.Empty;
 }
 
-// Social Login
-public class SocialLoginRequest
-{
-    public string IdToken { get; set; } = string.Empty;
-}
-
 // Auth Response
 public class AuthResponse
 {

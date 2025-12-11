@@ -282,52 +282,6 @@ class ApiClient {
     return response;
   }
 
-  async loginWithGoogle(idToken: string): Promise<AuthResponse> {
-    const response = await this.request<AuthResponse>(
-      '/api/auth/google',
-      {
-        method: 'POST',
-        body: JSON.stringify({ idToken }),
-      },
-      false
-    );
-
-    await this.saveTokens(response.accessToken, response.refreshToken);
-    const user: AuthUser = {
-      userId: response.userId,
-      email: response.email,
-      displayName: response.displayName,
-      photoUrl: response.photoUrl,
-    };
-    await this.saveUser(user);
-    this.onAuthChange?.(user);
-
-    return response;
-  }
-
-  async loginWithApple(idToken: string): Promise<AuthResponse> {
-    const response = await this.request<AuthResponse>(
-      '/api/auth/apple',
-      {
-        method: 'POST',
-        body: JSON.stringify({ idToken }),
-      },
-      false
-    );
-
-    await this.saveTokens(response.accessToken, response.refreshToken);
-    const user: AuthUser = {
-      userId: response.userId,
-      email: response.email,
-      displayName: response.displayName,
-      photoUrl: response.photoUrl,
-    };
-    await this.saveUser(user);
-    this.onAuthChange?.(user);
-
-    return response;
-  }
-
   async logout(): Promise<void> {
     try {
       if (this.refreshToken) {

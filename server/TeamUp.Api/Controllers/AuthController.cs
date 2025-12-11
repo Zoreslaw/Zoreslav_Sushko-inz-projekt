@@ -69,48 +69,6 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Login with Google ID token
-    /// </summary>
-    [HttpPost("google")]
-    public async Task<ActionResult<AuthResponse>> GoogleLogin([FromBody] SocialLoginRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.IdToken))
-        {
-            return BadRequest(new { error = "ID token is required" });
-        }
-
-        var result = await _authService.GoogleLoginAsync(request.IdToken);
-        
-        if (result == null)
-        {
-            return Unauthorized(new { error = "Invalid Google token" });
-        }
-
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Login with Apple ID token
-    /// </summary>
-    [HttpPost("apple")]
-    public async Task<ActionResult<AuthResponse>> AppleLogin([FromBody] SocialLoginRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.IdToken))
-        {
-            return BadRequest(new { error = "ID token is required" });
-        }
-
-        var result = await _authService.AppleLoginAsync(request.IdToken);
-        
-        if (result == null)
-        {
-            return Unauthorized(new { error = "Invalid Apple token" });
-        }
-
-        return Ok(result);
-    }
-
-    /// <summary>
     /// Refresh access token using refresh token
     /// </summary>
     [HttpPost("refresh")]

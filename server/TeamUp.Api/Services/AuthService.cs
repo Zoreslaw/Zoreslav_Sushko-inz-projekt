@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using TeamUp.Api.Data;
 using TeamUp.Api.DTOs;
 using TeamUp.Api.Models;
-using Google.Apis.Auth;
 
 namespace TeamUp.Api.Services;
 
@@ -11,18 +10,15 @@ public class AuthService
     private readonly ApplicationDbContext _context;
     private readonly JwtService _jwtService;
     private readonly ILogger<AuthService> _logger;
-    private readonly IConfiguration _configuration;
 
     public AuthService(
         ApplicationDbContext context,
         JwtService jwtService,
-        ILogger<AuthService> logger,
-        IConfiguration configuration)
+        ILogger<AuthService> logger)
     {
         _context = context;
         _jwtService = jwtService;
         _logger = logger;
-        _configuration = configuration;
     }
 
     public async Task<AuthResponse?> RegisterAsync(RegisterRequest request)
@@ -92,130 +88,6 @@ public class AuthService
         _logger.LogInformation("User logged in: {UserId}", user.Id);
 
         return await GenerateAuthResponseAsync(user);
-    }
-
-    public async Task<AuthResponse?> GoogleLoginAsync(string idToken)
-    {
-        try
-        {
-            var googleClientId = _configuration["Authentication:Google:ClientId"];
-            
-            var payload = await GoogleJsonWebSignature.ValidateAsync(idToken, new GoogleJsonWebSignature.ValidationSettings
-            {
-                Audience = new[] { googleClientId }
-            });
-
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => 
-                    (u.AuthProvider == "Google" && u.ProviderId == payload.Subject) ||
-                    u.Email.ToLower() == payload.Email.ToLower());
-
-            if (user == null)
-            {
-                // Create new user
-                user = new User
-                {
-                    Email = payload.Email.ToLower(),
-                    DisplayName = payload.Name ?? payload.Email.Split('@')[0],
-                    PhotoUrl = payload.Picture,
-                    AuthProvider = "Google",
-                    ProviderId = payload.Subject,
-                    Gender = "Other",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.Users.Add(user);
-                
-                var presence = new UserPresence
-                {
-                    UserId = user.Id,
-                    IsOnline = false,
-                    LastSeenAt = DateTime.UtcNow
-                };
-                _context.UserPresences.Add(presence);
-
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("New user created via Google: {UserId}", user.Id);
-            }
-            else if (user.AuthProvider != "Google")
-            {
-                // Link Google account to existing user
-                user.AuthProvider = "Google";
-                user.ProviderId = payload.Subject;
-                if (string.IsNullOrEmpty(user.PhotoUrl))
-                {
-                    user.PhotoUrl = payload.Picture;
-                }
-                user.UpdatedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-            }
-
-            return await GenerateAuthResponseAsync(user);
-        }
-        catch (InvalidJwtException ex)
-        {
-            _logger.LogWarning(ex, "Invalid Google ID token");
-            return null;
-        }
-    }
-
-    public async Task<AuthResponse?> AppleLoginAsync(string idToken)
-    {
-        try
-        {
-            // Decode Apple ID token (simplified - in production use proper validation)
-            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-            var token = handler.ReadJwtToken(idToken);
-            
-            var email = token.Claims.FirstOrDefault(c => c.Type == "email")?.Value;
-            var sub = token.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-
-            if (string.IsNullOrEmpty(sub))
-            {
-                _logger.LogWarning("Apple login failed: missing subject");
-                return null;
-            }
-
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => 
-                    (u.AuthProvider == "Apple" && u.ProviderId == sub) ||
-                    (!string.IsNullOrEmpty(email) && u.Email.ToLower() == email.ToLower()));
-
-            if (user == null)
-            {
-                user = new User
-                {
-                    Email = email?.ToLower() ?? $"apple_{sub}@private.apple.com",
-                    DisplayName = email?.Split('@')[0] ?? "Apple User",
-                    AuthProvider = "Apple",
-                    ProviderId = sub,
-                    Gender = "Other",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.Users.Add(user);
-                
-                var presence = new UserPresence
-                {
-                    UserId = user.Id,
-                    IsOnline = false,
-                    LastSeenAt = DateTime.UtcNow
-                };
-                _context.UserPresences.Add(presence);
-
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("New user created via Apple: {UserId}", user.Id);
-            }
-
-            return await GenerateAuthResponseAsync(user);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Apple login failed");
-            return null;
-        }
     }
 
     public async Task<AuthResponse?> RefreshTokenAsync(string refreshToken)

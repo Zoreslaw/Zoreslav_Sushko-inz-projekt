@@ -34,6 +34,9 @@ export interface ProfileUpdate {
   otherGames?: string[];
 }
 
+// Alias for backward compatibility
+export type UserProfileUpdate = ProfileUpdate;
+
 interface UseProfileResult {
   profile: ProfileData;
   loading: boolean;

@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { createRandomUser } from '@/utils/createRandomUser';
 import ProfileCheckModal from '@/components/Swipe/ProfileCheckModal';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore';
+import { api } from '@/services/api';
 
 export default function HomeScreen() {
   const { user, signOut } = useAuth();
@@ -19,13 +19,14 @@ export default function HomeScreen() {
   const [showProfileCheck, setShowProfileCheck] = useState(false);
 
   const handleSwipePress = async () => {
-    if (!user?.uid) return;
+    if (!user?.userId) return;
     
     try {
-      const userDoc = await getDoc(doc(getFirestore(), 'users', user.uid));
-      const userData = userDoc.data();
+      const userData = await api.getProfile();
       
-      if (!userData?.preferenceAgeRange || !userData?.preferenceGender || !userData?.gender) {
+      // Check if user has completed their profile
+      if (!userData?.preferenceAgeMin || !userData?.preferenceAgeMax || 
+          !userData?.preferenceGender || !userData?.gender || !userData?.age) {
         setShowProfileCheck(true);
       } else {
         router.push('/swipe');

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, Text } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import storage from '@react-native-firebase/storage'
 import { useRouter } from 'expo-router';
+import { api } from '@/services/api';
 import { SignOutButton } from '@/components/button/SignOutButton';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useAuth } from '@/hooks/useAuth';
-import { useProfile, UserProfileUpdate } from '@/hooks/useProfile';
+import { useProfile, ProfileUpdate } from '@/hooks/useProfile';
 import ProfileHeader from '@/components/ProfileHeader';
 import ProfileBar from '@/components/ProfileBar';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
@@ -44,7 +44,7 @@ interface ModalData {
 export default function Profile() {
   const backgroundColor = useThemeColor({}, 'background');
   const { user, signOut } = useAuth();
-  const { profile, updateProfile } = useProfile();
+  const { profile, loading, updateProfile } = useProfile();
   const router = useRouter();
   const [isBioPressed, setIsBioPressed] = useState(false);
   const [isPreferencesPressed, setIsPreferencesPressed] = useState(false);
@@ -52,7 +52,7 @@ export default function Profile() {
   const [isSettingsPressed, setIsSettingsgPressed] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalData, setModalData] = useState<ModalData | null>(null);
-  const [updateUserProfilePayload, setUpdateUserProfilePayload] = useState<UserProfileUpdate | null>(null);
+  const [updateUserProfilePayload, setUpdateUserProfilePayload] = useState<ProfileUpdate | null>(null);
 
   const handleSignOut = async () => {
     await signOut();
@@ -116,15 +116,10 @@ export default function Profile() {
       handleCloseModal();
 
       const image = result.assets[0];
-      const response = await fetch(image.uri);
-      const blob = await response.blob();
-
-      const fileName = `avatars/${user.uid}/avatar_${Date.now()}.jpg`;
-      const reference = storage().ref(fileName);
-      await reference.put(blob);
-
-      const downloadUrl = await reference.getDownloadURL();
-      await updateProfile({ photoURL: downloadUrl });
+      
+      // Upload avatar using backend API
+      const uploadResult = await api.uploadAvatar(image.uri);
+      await updateProfile({ photoUrl: uploadResult.photoUrl });
 
     } catch (err) {
       console.error("Avatar upload failed:", err);
@@ -189,10 +184,10 @@ export default function Profile() {
   const handleLanguages = async () => {
     const currentCodes = profile.languages ?? [];
     const currentNames = currentCodes
-      .map(code => reverseLanguageMapEn[code])
+      .map((code: string) => reverseLanguageMapEn[code])
       .filter(Boolean);
   
-    setUpdateUserProfilePayload(prev => ({
+    setUpdateUserProfilePayload((prev: ProfileUpdate | null) => ({
       ...(prev ?? {}),
       languages: currentNames,
     }));
@@ -316,10 +311,10 @@ export default function Profile() {
   const handlePreferredLanguages = async () => {
     const currentCodes = profile.preferredLanguages ?? [];
     const currentNames = currentCodes
-      .map(code => reverseLanguageMapEn[code])
+      .map((code: string) => reverseLanguageMapEn[code])
       .filter(Boolean);
 
-    setUpdateUserProfilePayload(prev => ({
+    setUpdateUserProfilePayload((prev: ProfileUpdate | null) => ({
       ...(prev ?? {}),
       preferenceLanguages: currentNames,
     }));
@@ -510,7 +505,7 @@ export default function Profile() {
       case 'langEdit': {
         const selectedLanguages = updateUserProfilePayload?.languages ?? [];
         const newLanguages = selectedLanguages
-          .map(name => languageMapEn[name])
+          .map((name: string) => languageMapEn[name])
           .filter(Boolean);
         const oldLanguages = profile.languages;
       
@@ -529,7 +524,7 @@ export default function Profile() {
 
       case 'ageEdit': {
         const newAge = updateUserProfilePayload?.age ?? '';
-        const oldAge = profile?.age?.toString() ?? '';
+        const oldAge = (profile?.age !== null && profile?.age !== undefined) ? profile.age.toString() : '';
 
         if (oldAge !== '' && newAge.trim().length === 0) {
           await updateProfile({ age: '' });
@@ -578,7 +573,7 @@ export default function Profile() {
       case 'prefLangEdit': {
         const selectedLanguages = updateUserProfilePayload?.preferenceLanguages ?? [];
         const newPreferenceLanguages = selectedLanguages
-          .map(name => languageMapEn[name])
+          .map((name: string) => languageMapEn[name])
           .filter(Boolean);
         const oldPreferenceLanguages = profile.preferredLanguages;
 
@@ -685,52 +680,61 @@ export default function Profile() {
     await handleCloseModal();
   };
 
+  // Show loading while profile is being fetched
+  if (loading) {
+    return (
+      <View style={[styles.appContainer, { backgroundColor, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#888' }}>Loading profile...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.appContainer, { backgroundColor }]}>
       <View style={styles.profileContainer}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
-          <ProfileBar avatarUrl={profile?.avatarUrl} name={profile?.userName} email={user?.email} onAvatarPress={handlePhotoSource} onEditPress={handleNameEdit} />
+          <ProfileBar avatarUrl={profile?.avatarUrl || ''} name={profile?.userName || ''} email={user?.email || ''} onAvatarPress={handlePhotoSource} onEditPress={handleNameEdit} />
           <ProfileMenuItem title="Bio" iconName="user" isPressed={isBioPressed} onPress={handleBio} />
 
           <ProfileAnimatedSubmenu isExpanded={isBioPressed}>
-            <ProfileSubmenuItem title='Favorite Category' contents={[profile?.favoriteCategory]} onPress={handleFavoriteCategory} />
-            <ProfileSubmenuItem title='Languages' contents={profile?.languages.map(code => reverseLanguageMapEn[code]).filter(Boolean)} onPress={handleLanguages} />
-            <ProfileSubmenuItem title='Age' contents={[(profile.age ? profile.age.toString() : '')]} onPress={handleAge} />
-            <ProfileSubmenuItem title='Gender' contents={[profile?.gender]} onPress={handleGender} />
-            <ProfileSubmenuItem title='Description' contents={[profile?.description]} onPress={handleDescription} />
+            <ProfileSubmenuItem title='Favorite Category' contents={[profile?.favoriteCategory || '']} onPress={handleFavoriteCategory} />
+            <ProfileSubmenuItem title='Languages' contents={(profile?.languages || []).map((code: string) => reverseLanguageMapEn[code]).filter(Boolean)} onPress={handleLanguages} />
+            <ProfileSubmenuItem title='Age' contents={[(profile?.age !== null && profile?.age !== undefined) ? profile.age.toString() : '']} onPress={handleAge} />
+            <ProfileSubmenuItem title='Gender' contents={[profile?.gender || '']} onPress={handleGender} />
+            <ProfileSubmenuItem title='Description' contents={[profile?.description || '']} onPress={handleDescription} />
           </ProfileAnimatedSubmenu>
 
           <ProfileMenuItem title="Preferences" iconName="thumbs-up" isPressed={isPreferencesPressed} onPress={handlePreferences} />
 
           <ProfileAnimatedSubmenu isExpanded={isPreferencesPressed}>
-            <ProfileSubmenuItem title='Categories' contents={profile.preferredCategories} onPress={handlePreferredCategories} />
-            <ProfileSubmenuItem title='Languages' contents={profile.preferredLanguages.map(code => reverseLanguageMapEn[code]).filter(Boolean)} onPress={handlePreferredLanguages} />
+            <ProfileSubmenuItem title='Categories' contents={profile?.preferredCategories || []} onPress={handlePreferredCategories} />
+            <ProfileSubmenuItem title='Languages' contents={(profile?.preferredLanguages || []).map((code: string) => reverseLanguageMapEn[code]).filter(Boolean)} onPress={handlePreferredLanguages} />
             <ProfileSubmenuItem title='Min Age' contents={[
               (() => {
-                const min = profile.preferredAgeRange instanceof Map
+                const min = profile?.preferredAgeRange instanceof Map
                   ? profile.preferredAgeRange.get('min')
                   : undefined;
-                return min !== undefined ? min.toString() : '';
+                return min !== undefined && min !== null ? min.toString() : '';
               })()]}
               onPress={handlePreferredAgeRangeMin}
             />
             <ProfileSubmenuItem title='Max Age' contents={[
               (() => {
-                const max = profile.preferredAgeRange instanceof Map
+                const max = profile?.preferredAgeRange instanceof Map
                   ? profile.preferredAgeRange.get('max')
                   : undefined;
-                return max !== undefined ? max.toString() : '';
+                return max !== undefined && max !== null ? max.toString() : '';
               })()]}
               onPress={handlePreferredAgeRangeMax}
             />
-            <ProfileSubmenuItem title='Gender' contents={[profile.preferredGender]} onPress={handlePreferredGender} />
+            <ProfileSubmenuItem title='Gender' contents={[profile?.preferredGender || '']} onPress={handlePreferredGender} />
           </ProfileAnimatedSubmenu>
 
           <ProfileMenuItem title="Games" iconName="game-controller-outline" isPressed={isGamesPressed} onPress={handleGames} />
 
           <ProfileAnimatedSubmenu isExpanded={isGamesPressed}>
-            <ProfileSubmenuItem title='Favorite Games' contents={profile.favoriteGames} onPress={handleFavoriteGames} />
-            <ProfileSubmenuItem title='Other Games' contents={profile.otherGames} onPress={handleOtherGames} />
+            <ProfileSubmenuItem title='Favorite Games' contents={profile?.favoriteGames || []} onPress={handleFavoriteGames} />
+            <ProfileSubmenuItem title='Other Games' contents={profile?.otherGames || []} onPress={handleOtherGames} />
           </ProfileAnimatedSubmenu>
           <ProfileMenuItem title="Settings" iconName="settings" isPressed={isSettingsPressed} onPress={handleSettings} />
         </ScrollView>

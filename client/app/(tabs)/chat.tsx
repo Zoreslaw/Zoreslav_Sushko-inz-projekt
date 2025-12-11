@@ -33,18 +33,18 @@ export default function Chat() {
   const router = useRouter();
   
   const handleCreateConversation = async () => {
-    if (!user?.uid) {
+    if (!user?.userId) {
       console.error('No user ID available');
       return;
     }
     
     console.log('Creating conversation with:', {
-      currentUserId: user.uid,
+      currentUserId: user.userId,
       otherUserId: 'GkQAhpVok5V0KuETl67wesA42dA2'
     });
 
     try {
-      const conversationId = await createOrGetConversation(user.uid, 'GkQAhpVok5V0KuETl67wesA42dA2');
+      const conversationId = await createOrGetConversation(user.userId, 'GkQAhpVok5V0KuETl67wesA42dA2');
       console.log('Successfully created/found conversation:', conversationId);
       router.push(`/conversation/${conversationId}`);
     } catch (error) {

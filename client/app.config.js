@@ -17,9 +17,7 @@ export default {
     ],
     ios: {
       supportsTablet: true,
-      usesAppleSignIn: true,
       bundleIdentifier: "com.umaps.teamup",
-      // googleServicesFile: "./configs/google-services.json",
       infoPlist: {
         CFBundleAllowMixedLocalizations: true,
         ExpoLocalization_supportsRTL: true,
@@ -31,7 +29,6 @@ export default {
         // foregroundImage: "./assets/images/book_icon.png",
         backgroundColor: "#232323",
       },
-      googleServicesFile: "./configs/google-services.json",
       package: "com.umaps.teamup",
       package_name: "com.umaps.teamup",
     },
@@ -41,12 +38,7 @@ export default {
     plugins: [
       "expo-router",
       "expo-document-picker",
-      "expo-apple-authentication",
       "react-native-video",
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth",
-      "@react-native-firebase/crashlytics",
-      "@react-native-google-signin/google-signin",
       [
         "expo-build-properties",
         {

@@ -16,9 +16,13 @@ import { api } from '@/services/api';
 export function useSwipeActions(currentUserId?: string) {
   // "Like" a user
   async function likeUser(swipedUser: { id: string; isMatch?: boolean }) {
-    if (!currentUserId || !swipedUser?.id) return null;
+    if (!currentUserId || !swipedUser?.id) {
+      console.log('Missing userId or swipedUser.id');
+      return null;
+    }
 
     try {
+      console.log('Calling API likeUser with:', swipedUser.id);
       const result = await api.likeUser(swipedUser.id);
       console.log('Like result:', result);
       
@@ -35,9 +39,13 @@ export function useSwipeActions(currentUserId?: string) {
 
   // "Dislike" a user
   async function dislikeUser(swipedUser: { id: string }) {
-    if (!currentUserId || !swipedUser?.id) return null;
+    if (!currentUserId || !swipedUser?.id) {
+      console.log('Missing userId or swipedUser.id');
+      return null;
+    }
 
     try {
+      console.log('Calling API dislikeUser with:', swipedUser.id);
       const result = await api.dislikeUser(swipedUser.id);
       console.log('Dislike result:', result);
       return result;

@@ -7,7 +7,6 @@ import NeonBackground from '@/components/NeonBackground';
 import HomeTabHeader from '@/components/HomeTabHeader';
 import { useAuth } from '@/hooks/useAuth';
 // import { HomeStatusBar } from '@/components/HomeStatusBar'; // if you want a custom status bar
-import { createRandomUser } from '@/utils/createRandomUser';
 import ProfileCheckModal from '@/components/Swipe/ProfileCheckModal';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { api } from '@/services/api';

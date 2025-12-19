@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 interface ProfileSubmenuItemProps {
   title: string;
@@ -12,52 +13,74 @@ const ProfileSubmenuItem: React.FC<ProfileSubmenuItemProps> = ({
   contents,
   onPress,
 }) => {
-  return(
-    <View style={styles.itemContainer}>
-      <Text style={styles.titleText}>{title}</Text>
-      <TouchableOpacity onPress={onPress} style={styles.contentsContainer}>
-        {contents.map((text, index) => (
-          <Text key={index} style={styles.contentsText}>
-            {text}
+  const background = useThemeColor({}, 'background');
+  const border = useThemeColor({}, 'separator');
+  const textPrimary = useThemeColor({}, 'text');
+  const textSecondary = useThemeColor({}, 'secondaryText');
+
+  const preview =
+    contents.filter(Boolean).join(', ') || 'Not set';
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: background,
+            borderColor: border,
+          },
+        ]}
+      >
+        <View style={styles.textBlock}>
+          <Text style={[styles.title, { color: textPrimary }]}>
+            {title}
           </Text>
-        ))}
-      </TouchableOpacity>
-    </View>
+
+          <Text
+            style={[styles.preview, { color: textSecondary }]}
+            numberOfLines={1}
+          >
+            {preview}
+          </Text>
+        </View>
+
+        <Text style={[styles.chevron, { color: textSecondary }]}>
+          ›
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  itemContainer: {
-    marginTop: 10,
-    marginBottom: 10,
-    justifyContent: 'center',
-    marginHorizontal: 15,
-  },
-  titleText: {
-    fontFamily: 'Roboto',
-    fontSize: 15,
-    fontWeight: 400,
-    color: '#FFFFFF',
-    marginLeft: 10,
-  },
-  contentsContainer: {
-    minHeight: 50,
-    justifyContent: 'center',
-    backgroundColor: '#242424',
-    borderColor: '#757575',
-    borderRadius: 10,
+  container: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderWidth: 1,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    gap: 10,
   },
-  contentsText: {
-    fontFamily: 'Roboto',
+  textBlock: {
+    flex: 1,
+    marginRight: 12,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  preview: {
+    fontSize: 13,
+  },
+  chevron: {
     fontSize: 20,
-    fontWeight: 400,
-    color: '#FFFFFF',
-    paddingVertical: 0,
-  }
-})
+    marginLeft: 8,
+  },
+});
 
 export default ProfileSubmenuItem;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { StyleSheet, View, ScrollView, Alert, Text } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -11,35 +11,14 @@ import ProfileHeader from '@/components/ProfileHeader';
 import ProfileBar from '@/components/ProfileBar';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import ProfileSubmenuItem from '@/components/ProfileSubmenuItem';
-import ProfileEditModal from '@/components/ProfileEditModal';
 import ProfileAnimatedSubmenu from '@/components/ProfileAnimatedSubmenu';
 import ProfileEditInput from '@/components/ProfileEditInput';
 import ProfileEditArrayInput from '@/components/ProfileEditArrayInput';
 import ProfileEditSelector from '@/components/ProfileEditSelector';
 import ProfileEditMultiSelector from '@/components/ProfileEditMultiSelector';
+import ProfileEditBottomSheet, { ProfileEditSheetRef } from '@/components/ProfileEditBottomSheet';
 import languageMapEn, { reverseLanguageMapEn } from '@/localization/languageMaps';
 
-interface ModalData {
-  title: string;
-  key?:
-  'userNameEdit' |
-  'favCatEdit' |
-  'langEdit' |
-  'ageEdit' |
-  'genderEdit' |
-  'descEdit' |
-  'prefCatEdit' |
-  'prefLangEdit' |
-  'prefAgeRangeMinEdit' |
-  'prefAgeRangeMaxEdit' |
-  'favGamesEdit' |
-  'otherGamesEdit' |
-  'other' |
-  string;
-  content?: JSX.Element;
-  isSelector?: boolean;
-  isSubmit?: boolean;
-}
 
 export default function Profile() {
   const backgroundColor = useThemeColor({}, 'background');
@@ -50,101 +29,94 @@ export default function Profile() {
   const [isPreferencesPressed, setIsPreferencesPressed] = useState(false);
   const [isGamesPressed, setIsGamesPressed] = useState(false);
   const [isSettingsPressed, setIsSettingsgPressed] = useState(false);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [modalData, setModalData] = useState<ModalData | null>(null);
-  const [updateUserProfilePayload, setUpdateUserProfilePayload] = useState<ProfileUpdate | null>(null);
+  const sheetRef = useRef<ProfileEditSheetRef>(null);
+
+  const openSheet = (params: {
+    title: string;
+    content: React.ReactNode;
+    onSubmit?: () => Promise<void> | void;
+    useScrollView?: boolean;
+  }) => {
+    sheetRef.current?.open({
+      title: params.title,
+      content: params.content,
+      onSubmit: params.onSubmit,
+      useScrollView: params.useScrollView,
+    });
+  };
 
   const handleSignOut = async () => {
     await signOut();
     router.replace('/sign-in');
   };
 
-  const handlePhotoSource = async () => {
-    setModalData({
-      title: "Profile Photo",
+  const handlePhotoSource = () => {
+    openSheet({
+      title: 'Profile Photo',
       content: (
         <ProfileEditSelector
-          options={['Camera', 'Gallery', 'Cancel']}
-          selected={'Cancel'}
-          onSelect={(source) => { handleAvatarEdit(source) }}
+          options={['Camera', 'Gallery']}
+          selected=""
+          onSelect={async (source) => {
+            if (!user) return;
+  
+            let result;
+            if (source === 'Camera') {
+              result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+            } else {
+              result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+            }
+  
+            if (result?.canceled) return;
+  
+            const image = result.assets[0];
+            const uploadResult = await api.uploadAvatar(image.uri);
+            await updateProfile({ photoUrl: uploadResult.photoUrl });
+  
+            sheetRef.current?.close();
+          }}
         />
       ),
-      isSelector: true,
-      isSubmit: false,
     });
-
-    setIsModalVisible(true);
-  }
-
-  const handleAvatarEdit = async (source: string) => {
-    try {
-      if (!user) {
-        Alert.alert("User must be authenticated to update avatars.");
-        return;
-      }
-
-      var result;
-
-      switch (source) {
-        case 'Camera': {
-          result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          });
-          break;
-        }
-
-        case 'Gallery': {
-          result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          });
-          break;
-        }
-
-        default:
-          handleCloseModal();
-          return;
-      };
-
-      if (result.canceled) return;
-
-      handleCloseModal();
-
-      const image = result.assets[0];
-      
-      // Upload avatar using backend API
-      const uploadResult = await api.uploadAvatar(image.uri);
-      await updateProfile({ photoUrl: uploadResult.photoUrl });
-
-    } catch (err) {
-      console.error("Avatar upload failed:", err);
-      Alert.alert("Upload Error", "Could not update your avatar.");
-    }
-  }
-
-  const handleNameEdit = async () => {
-    setModalData({
-      title: "User Name",
-      key: "userNameEdit",
-      content: <ProfileEditInput
-        value={updateUserProfilePayload?.displayName}
-        onChangeText={(newText) => {
-          setUpdateUserProfilePayload(
-            prev => ({
-              ...(prev ?? {}),
-              displayName: newText
-            }));
-        }}
-        placeholder='Enter new user name'
-      />
-    });
-    setIsModalVisible(true);
   };
+  
+
+  const handleNameEdit = () => {
+    let value = profile.userName;
+  
+    openSheet({
+      title: 'User Name',
+      content: (
+        <ProfileEditInput
+          value={value}
+          placeholder="Enter new user name"
+          onChangeText={(v) => (value = v)}
+        />
+      ),
+      onSubmit: async () => {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          Alert.alert('Invalid name');
+          return;
+        }
+        if (trimmed !== profile.userName) {
+          await updateProfile({ displayName: trimmed });
+        }
+        sheetRef.current?.close();
+      },
+    });
+  };
+  
 
   const handleBio = async () => {
     setIsBioPressed(!isBioPressed);
@@ -162,522 +134,293 @@ export default function Profile() {
     setIsSettingsgPressed(!isSettingsPressed);
   }
 
-  const handleFavoriteCategory = async () => {
-    setModalData({
-      title: "Favorite Category",
-      key: "favCatEdit",
-      content: <ProfileEditInput
-        value={updateUserProfilePayload?.favoriteCategory}
-        onChangeText={(newText) => {
-          setUpdateUserProfilePayload(
-            prev => ({
-              ...(prev ?? {}),
-              favoriteCategory: newText
-            }));
-        }}
-        placeholder="Enter favorite category"
-      />
+  const handleFavoriteCategory = () => {
+    let value = profile.favoriteCategory ?? '';
+  
+    openSheet({
+      title: 'Favorite Category',
+      content: (
+        <ProfileEditInput
+          value={value}
+          placeholder="Enter favorite category"
+          onChangeText={(v) => (value = v)}
+        />
+      ),
+      onSubmit: async () => {
+        const trimmed = value.trim();
+        if (trimmed !== profile.favoriteCategory) {
+          await updateProfile({ favoriteCategory: trimmed });
+        }
+        sheetRef.current?.close();
+      },
     });
-    setIsModalVisible(true);
-  }
+  };
+  
 
-  const handleLanguages = async () => {
-    const currentCodes = profile.languages ?? [];
-    const currentNames = currentCodes
-      .map((code: string) => reverseLanguageMapEn[code])
+  const handleLanguages = () => {
+    const initial = (profile.languages ?? [])
+      .map(code => reverseLanguageMapEn[code])
       .filter(Boolean);
   
-    setUpdateUserProfilePayload((prev: ProfileUpdate | null) => ({
-      ...(prev ?? {}),
-      languages: currentNames,
-    }));
+    let selected = [...initial];
   
-    setModalData({
-      title: "Languages",
-      key: "langEdit",
+    openSheet({
+      title: 'Languages',
       content: (
         <ProfileEditMultiSelector
           options={Object.keys(languageMapEn)}
-          selected={currentNames}
-          onChange={(newSelected) => {
-            setUpdateUserProfilePayload(prev => ({
-              ...(prev ?? {}),
-              languages: newSelected,
-            }));
-          }}
+          selected={initial}
+          onChange={(v) => (selected = v)}
         />
       ),
-      isSelector: true,
-    });
+      onSubmit: async () => {
+        const mapped = selected
+          .map(name => languageMapEn[name])
+          .filter(Boolean);
   
-    setIsModalVisible(true);
-  };
-
-  const handleAge = async () => {
-    setModalData({
-      title: "Age",
-      key: "ageEdit",
-      content: <ProfileEditInput
-        value={updateUserProfilePayload?.age}
-        onChangeText={(newText) => {
-          setUpdateUserProfilePayload(
-            prev => ({
-              ...(prev ?? {}),
-              age: newText.replace(/[^0-9]/g, '').replace(/^0+/, '')
-            }));
-        }}
-        placeholder="Enter age"
-        isNumeric={true}
-      />
+        if (JSON.stringify(mapped) !== JSON.stringify(profile.languages)) {
+          await updateProfile({ languages: mapped });
+        }
+        sheetRef.current?.close();
+      },
     });
-    setIsModalVisible(true);
-  }
+  };
+  
 
-  const handleGender = async () => {
-    setUpdateUserProfilePayload(prev => ({
-      ...(prev ?? {}),
-      gender: profile.gender
-    }));
+  const handleAge = () => {
+    let value = profile.age?.toString() ?? '';
+  
+    openSheet({
+      title: 'Age',
+      content: (
+        <ProfileEditInput
+          value={value}
+          isNumeric
+          placeholder="Enter age"
+          onChangeText={(v) => (value = v.replace(/[^0-9]/g, ''))}
+        />
+      ),
+      onSubmit: async () => {
+        if (value !== profile.age?.toString()) {
+          await updateProfile({ age: value });
+        }
+        sheetRef.current?.close();
+      },
+    });
+  };
+  
 
-    setModalData({
-      title: "Gender",
+  const handleGender = () => {
+    sheetRef.current?.open({
+      title: 'Gender',
       content: (
         <ProfileEditSelector
           options={['Male', 'Female', 'Other']}
-          selected={profile.preferredGender}
-          onSelect={(value) => { handleSelector("genderEdit", value) }}
+          selected={profile.gender}
+          onSelect={(value) => {
+            updateProfile({ gender: value });
+            sheetRef.current?.close();
+          }}
         />
       ),
-      isSelector: true,
-      isSubmit: false,
     });
+  };
+  
 
-    setIsModalVisible(true);
-  }
-
-  const handleDescription = async () => {
-    const initialDescription = profile.description ?? '';
-    setUpdateUserProfilePayload(prev => ({
-      ...(prev ?? {}),
-      description: initialDescription
-    }));
-
-    setTimeout(() => {
-      setModalData({
-        title: "Description",
-        key: "descEdit",
-        content: <ProfileEditInput
-          value={initialDescription}
-          onChangeText={(newText) => {
-            setUpdateUserProfilePayload(
-              prev => ({
-                ...(prev ?? {}),
-                description: newText
-              }));
-          }}
+  const handleDescription = () => {
+    let value = profile.description ?? '';
+  
+    openSheet({
+      title: 'Description',
+      content: (
+        <ProfileEditInput
+          value={value}
           placeholder="Enter description"
-          multiline={true}
+          multiline
+          onChangeText={(v) => (value = v)}
         />
-      });
-      setIsModalVisible(true);
-    }, 0);
-  }
+      ),
+      onSubmit: async () => {
+        const trimmed = value.trim();
+        if (trimmed !== profile.description) {
+          await updateProfile({ description: trimmed });
+        }
+        sheetRef.current?.close();
+      },
+    });
+  };
+  
 
-  const handlePreferredCategories = async () => {
-    setUpdateUserProfilePayload(prev => ({
-      ...(prev ?? {}),
-      preferenceCategories: profile.preferredCategories ?? []
-    }));
-
-    setTimeout(() => {
-      setModalData({
-        title: "Preferred Categories",
-        key: "prefCatEdit",
-        content: <ProfileEditArrayInput
-          arrayItems={profile.preferredCategories ?? []}
-          onArrayItemsChange={(newArray) => {
-            setUpdateUserProfilePayload(prev => ({
-              ...(prev ?? {}),
-              preferenceCategories: newArray
-            }));
-          }}
+  const handlePreferredCategories = () => {
+    let value = [...(profile.preferredCategories ?? [])];
+  
+    openSheet({
+      title: 'Preferred Categories',
+      content: (
+        <ProfileEditArrayInput
+          arrayItems={value}
           placeholder="Enter categories"
+          onArrayItemsChange={(v) => (value = v)}
         />
-      });
-      setIsModalVisible(true);
-    }, 0);
-  }
+      ),
+      useScrollView: false,
+      onSubmit: async () => {
+        if (JSON.stringify(value) !== JSON.stringify(profile.preferredCategories)) {
+          await updateProfile({ preferenceCategories: value });
+        }
+        sheetRef.current?.close();
+      },
+    });
+  };
+  
 
-  const handlePreferredLanguages = async () => {
-    const currentCodes = profile.preferredLanguages ?? [];
-    const currentNames = currentCodes
-      .map((code: string) => reverseLanguageMapEn[code])
+  const handlePreferredLanguages = () => {
+    const initial = (profile.preferredLanguages ?? [])
+      .map(code => reverseLanguageMapEn[code])
       .filter(Boolean);
-
-    setUpdateUserProfilePayload((prev: ProfileUpdate | null) => ({
-      ...(prev ?? {}),
-      preferenceLanguages: currentNames,
-    }));
-
-    setModalData({
-      title: "Preferred Languages",
-      key: "prefLangEdit",
+  
+    let selected = [...initial];
+  
+    openSheet({
+      title: 'Preferred Languages',
       content: (
         <ProfileEditMultiSelector
           options={Object.keys(languageMapEn)}
-          selected={currentNames}
-          onChange={(newSelected) => {
-            setUpdateUserProfilePayload(prev => ({
-              ...(prev ?? {}),
-              preferenceLanguages: newSelected,
-            }));
-          }}
+          selected={initial}
+          onChange={(v) => (selected = v)}
         />
       ),
-      isSelector: true,
+      onSubmit: async () => {
+        const mapped = selected
+          .map(name => languageMapEn[name])
+          .filter(Boolean);
+  
+        if (JSON.stringify(mapped) !== JSON.stringify(profile.preferredLanguages)) {
+          await updateProfile({ preferenceLanguages: mapped });
+        }
+        sheetRef.current?.close();
+      },
     });
-
-    setIsModalVisible(true);
   };
+  
 
-  const handlePreferredAgeRangeMin = async () => {
-    setModalData({
-      title: "Preferred Min Age",
-      key: "prefAgeRangeMinEdit",
-      content: <ProfileEditInput
-        onChangeText={(newText) => {
-          const parsed = parseInt(newText.replace(/[^0-9]/g, '').replace(/^0+/, ''), 10);
-          setUpdateUserProfilePayload(prev => {
-            const currentRange = new Map(profile.preferredAgeRange);
-            currentRange.set('min', isNaN(parsed) ? 0 : parsed);
-            return {
-              ...(prev ?? {}),
-              preferenceAgeRange: currentRange
-            };
-          });
-        }}
-        placeholder="Enter min age"
-        isNumeric={true}
-      />
+  const handlePreferredAgeRangeMin = () => {
+    let value = profile.preferredAgeRange?.get('min')?.toString() ?? '';
+  
+    openSheet({
+      title: 'Preferred Min Age',
+      content: (
+        <ProfileEditInput
+          value={value}
+          isNumeric
+          placeholder="Enter min age"
+          onChangeText={(v) => (value = v.replace(/[^0-9]/g, ''))}
+        />
+      ),
+      onSubmit: async () => {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) return;
+  
+        const updated = new Map(profile.preferredAgeRange);
+        updated.set('min', parsed);
+  
+        await updateProfile({ preferenceAgeRange: updated });
+        sheetRef.current?.close();
+      },
     });
+  };
+  
 
-    setIsModalVisible(true);
-  }
-
-  const handlePreferredAgeRangeMax = async () => {
-
-    setModalData({
-      title: "Preferred Max Age",
-      key: "prefAgeRangeMaxEdit",
-      content: <ProfileEditInput
-        onChangeText={(newText) => {
-          const parsed = parseInt(newText.replace(/[^0-9]/g, '').replace(/^0+/, ''), 10);
-          setUpdateUserProfilePayload(prev => {
-            const currentRange = new Map(profile.preferredAgeRange);
-            currentRange.set('max', isNaN(parsed) ? 0 : parsed);
-            return {
-              ...(prev ?? {}),
-              preferenceAgeRange: currentRange
-            };
-          });
-        }}
-        placeholder="Enter max age"
-        isNumeric={true}
-      />
+  const handlePreferredAgeRangeMax = () => {
+    let value = profile.preferredAgeRange?.get('max')?.toString() ?? '';
+  
+    openSheet({
+      title: 'Preferred Max Age',
+      content: (
+        <ProfileEditInput
+          value={value}
+          isNumeric
+          placeholder="Enter max age"
+          onChangeText={(v) => (value = v.replace(/[^0-9]/g, ''))}
+        />
+      ),
+      onSubmit: async () => {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) return;
+  
+        const updated = new Map(profile.preferredAgeRange);
+        updated.set('max', parsed);
+  
+        await updateProfile({ preferenceAgeRange: updated });
+        sheetRef.current?.close();
+      },
     });
+  };
+  
 
-    setIsModalVisible(true);
-  }
-
-  const handlePreferredGender = async () => {
-    setUpdateUserProfilePayload(prev => ({
-      ...(prev ?? {}),
-      preferenceGender: profile.preferredGender
-    }));
-
-    setModalData({
-      title: "Preferred Gender",
+  const handlePreferredGender = () => {
+    openSheet({
+      title: 'Preferred Gender',
       content: (
         <ProfileEditSelector
           options={['Any', 'Male', 'Female', 'Other']}
           selected={profile.preferredGender}
-          onSelect={(value) => { handleSelector("prefGenderEdit", value) }}
+          onSelect={async (value) => {
+            if (value !== profile.preferredGender) {
+              await updateProfile({ preferenceGender: value });
+            }
+            sheetRef.current?.close();
+          }}
         />
       ),
-      isSelector: true,
-      isSubmit: false,
     });
-
-    setIsModalVisible(true);
   };
+  
 
 
-  const handleFavoriteGames = async () => {
-    setUpdateUserProfilePayload(prev => ({
-      ...(prev ?? {}),
-      favoriteGames: profile.favoriteGames ?? []
-    }));
-
-    setTimeout(() => {
-      setModalData({
-        title: "Favorite Games",
-        key: "favGamesEdit",
-        content: <ProfileEditArrayInput
-          arrayItems={profile.favoriteGames ?? []}
-          onArrayItemsChange={(newArray) => {
-            setUpdateUserProfilePayload(prev => ({
-              ...(prev ?? {}),
-              favoriteGames: newArray
-            }));
-          }}
+  const handleFavoriteGames = () => {
+    let value = [...(profile.favoriteGames ?? [])];
+  
+    openSheet({
+      title: 'Favorite Games',
+      content: (
+        <ProfileEditArrayInput
+          arrayItems={value}
           placeholder="Enter games"
+          onArrayItemsChange={(v) => (value = v)}
         />
-      });
-      setIsModalVisible(true);
-    }, 0);
-  }
-
-  const handleOtherGames = async () => {
-    setUpdateUserProfilePayload(prev => ({
-      ...(prev ?? {}),
-      otherGames: profile.otherGames ?? []
-    }));
-
-    setTimeout(() => {
-      setModalData({
-        title: "Other Games",
-        key: "otherGamesEdit",
-        content: <ProfileEditArrayInput
-          arrayItems={profile.otherGames ?? []}
-          onArrayItemsChange={(newArray) => {
-            setUpdateUserProfilePayload(prev => ({
-              ...(prev ?? {}),
-              otherGames: newArray
-            }));
-          }}
-          placeholder="Enter games"
-        />
-      });
-      setIsModalVisible(true);
-    }, 0);
-  }
-
-  const handleCloseModal = async () => {
-    setIsModalVisible(false);
-    setModalData(null);
-    setUpdateUserProfilePayload(null);
-  }
-
-  const handleSubmit = async () => {
-    switch (modalData?.key) {
-      case 'userNameEdit': {
-        const newDisplayName = updateUserProfilePayload?.displayName?.trim().replace(/\s+/g, ' ') ?? '';
-        const oldDisplayName = profile.userName;
-
-        if (newDisplayName.trim().length === 0) {
-          Alert.alert("Invalid Name", "User name cannot be empty.");
-          return;
+      ),
+      useScrollView: false,
+      onSubmit: async () => {
+        if (JSON.stringify(value) !== JSON.stringify(profile.favoriteGames)) {
+          await updateProfile({ favoriteGames: value });
         }
-
-        if (oldDisplayName !== newDisplayName) {
-          await updateProfile({ displayName: newDisplayName });
-        }
-
-        break;
-      }
-
-      case 'favCatEdit': {
-        const newFavoriteCategory = updateUserProfilePayload?.favoriteCategory?.trim().replace(/\s+/g, ' ') ?? '';
-        const oldFavoriteCategory = profile.favoriteCategory;
-
-        if (oldFavoriteCategory !== '' && newFavoriteCategory.trim().length === 0) {
-          await updateProfile({ favoriteCategory: '' });
-          break;
-        }
-
-        if (oldFavoriteCategory !== newFavoriteCategory) {
-          await updateProfile({ favoriteCategory: newFavoriteCategory });
-        }
-
-        break;
-      }
-
-      case 'langEdit': {
-        const selectedLanguages = updateUserProfilePayload?.languages ?? [];
-        const newLanguages = selectedLanguages
-          .map((name: string) => languageMapEn[name])
-          .filter(Boolean);
-        const oldLanguages = profile.languages;
-      
-        if (oldLanguages.length > 0 && newLanguages.length === 0) {
-          await updateProfile({ languages: [] });
-          break;
-        }
-      
-        if (JSON.stringify(oldLanguages) !== JSON.stringify(newLanguages)) {
-          await updateProfile({ languages: newLanguages });
-        }
-      
-        break;
-      }
-      
-
-      case 'ageEdit': {
-        const newAge = updateUserProfilePayload?.age ?? '';
-        const oldAge = (profile?.age !== null && profile?.age !== undefined) ? profile.age.toString() : '';
-
-        if (oldAge !== '' && newAge.trim().length === 0) {
-          await updateProfile({ age: '' });
-          break;
-        }
-
-        if (oldAge !== newAge) {
-          await updateProfile({ age: newAge })
-        }
-
-        break;
-      }
-
-      case 'descEdit': {
-        const newDescription = updateUserProfilePayload?.description?.trim().replace(/\s+/g, ' ') ?? '';
-        const oldDescription = profile.description;
-
-        if (oldDescription !== '' && newDescription.trim().length === 0) {
-          await updateProfile({ description: '' });
-          break;
-        }
-
-        if (oldDescription !== newDescription) {
-          await updateProfile({ description: newDescription });
-        }
-
-        break;
-      }
-
-      case 'prefCatEdit': {
-        const newPreferenceCategories = updateUserProfilePayload?.preferenceCategories ?? [];
-        const oldPreferenceCategories = profile.preferredCategories;
-
-        if (oldPreferenceCategories.length > 0 && newPreferenceCategories.length === 0) {
-          await updateProfile({ preferenceCategories: [] });
-          break;
-        }
-
-        if (JSON.stringify(oldPreferenceCategories) !== JSON.stringify(newPreferenceCategories)) {
-          await updateProfile({ preferenceCategories: newPreferenceCategories });
-        }
-
-        break;
-      }
-
-      case 'prefLangEdit': {
-        const selectedLanguages = updateUserProfilePayload?.preferenceLanguages ?? [];
-        const newPreferenceLanguages = selectedLanguages
-          .map((name: string) => languageMapEn[name])
-          .filter(Boolean);
-        const oldPreferenceLanguages = profile.preferredLanguages;
-
-        if (oldPreferenceLanguages.length > 0 && newPreferenceLanguages.length === 0) {
-          await updateProfile({ preferenceLanguages: [] });
-          break;
-        }
-
-        if (JSON.stringify(oldPreferenceLanguages) !== JSON.stringify(newPreferenceLanguages)) {
-          await updateProfile({ preferenceLanguages: newPreferenceLanguages });
-        }
-
-        break;
-      }
-
-      case 'prefAgeRangeMinEdit':
-      case 'prefAgeRangeMaxEdit': {
-        const newRange = updateUserProfilePayload?.preferenceAgeRange;
-        const oldRange = profile.preferredAgeRange;
-
-        if (!newRange) break;
-
-        const newMin = newRange.get('min');
-        const newMax = newRange.get('max');
-        const oldMin = oldRange.get('min');
-        const oldMax = oldRange.get('max');
-
-        const didMinChange = newMin !== oldMin;
-        const didMaxChange = newMax !== oldMax;
-
-        if (didMinChange || didMaxChange) {
-          const updatedRange = new Map(oldRange);
-
-          if (didMinChange && newMin !== undefined) updatedRange.set('min', newMin);
-          if (didMaxChange && newMax !== undefined) updatedRange.set('max', newMax);
-
-          await updateProfile({ preferenceAgeRange: updatedRange });
-        }
-
-        break;
-      }
-
-      case 'favGamesEdit': {
-        const newFavoriteGames = updateUserProfilePayload?.favoriteGames ?? [];
-        const oldFavoriteGames = profile.favoriteGames;
-
-        if (oldFavoriteGames.length > 0 && newFavoriteGames.length === 0) {
-          await updateProfile({ favoriteGames: [] });
-          break;
-        }
-
-        if (JSON.stringify(oldFavoriteGames) !== JSON.stringify(newFavoriteGames)) {
-          await updateProfile({ favoriteGames: newFavoriteGames });
-        }
-
-        break;
-      }
-
-      case 'otherGamesEdit': {
-        const newOtherGames = updateUserProfilePayload?.otherGames ?? [];
-        const oldOtherGames = profile.otherGames;
-
-        if (oldOtherGames.length > 0 && newOtherGames.length === 0) {
-          await updateProfile({ otherGames: [] });
-          break;
-        }
-
-        if (JSON.stringify(oldOtherGames) !== JSON.stringify(newOtherGames)) {
-          await updateProfile({ otherGames: newOtherGames });
-        }
-
-        break;
-      }
-
-      default:
-        return;
-    }
-
-    await handleCloseModal();
+        sheetRef.current?.close();
+      },
+    });
   };
+  
 
-  const handleSelector = async (key: string, value: string) => {
-    switch (key) {
-      case 'prefGenderEdit': {
-        if (!value || value === profile.preferredGender) break;
-
-        await updateProfile({ preferenceGender: value });
-
-        break;
-      }
-
-      case 'genderEdit': {
-        if (!value || value === profile.gender) break;
-
-        await updateProfile({ gender: value });
-
-        break;
-      }
-
-      default:
-        return;
-    };
-
-    await handleCloseModal();
+  const handleOtherGames = () => {
+    let value = [...(profile.otherGames ?? [])];
+  
+    openSheet({
+      title: 'Other Games',
+      content: (
+        <ProfileEditArrayInput
+          arrayItems={value}
+          placeholder="Enter games"
+          onArrayItemsChange={(v) => (value = v)}
+        />
+      ),
+      useScrollView: false,
+      onSubmit: async () => {
+        if (JSON.stringify(value) !== JSON.stringify(profile.otherGames)) {
+          await updateProfile({ otherGames: value });
+        }
+        sheetRef.current?.close();
+      },
+    });
   };
 
   // Show loading while profile is being fetched
@@ -742,9 +485,7 @@ export default function Profile() {
           <SignOutButton label="Sign Out" onPress={handleSignOut} style={styles.signOutButton} />
         </View>
       </View>
-      <ProfileEditModal title={modalData?.title} isVisible={isModalVisible} closeModal={handleCloseModal} onSubmit={handleSubmit} isSelector={modalData?.isSelector} isSubmit={modalData?.isSubmit}>
-        {modalData?.content}
-      </ProfileEditModal>
+      <ProfileEditBottomSheet ref={sheetRef} />
     </View>
   );
 }

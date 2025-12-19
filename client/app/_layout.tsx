@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import * as SplashScreen from "expo-splash-screen";
 import { AppState, AppStateStatus } from "react-native";
 
@@ -60,6 +61,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <BottomSheetModalProvider>
         <AuthProvider>
           <ThemeProvider value={DefaultTheme}>
           <Stack screenOptions={{ headerShown: false }}>
@@ -71,6 +73,7 @@ export default function RootLayout() {
 
           </ThemeProvider>
         </AuthProvider>
+        </BottomSheetModalProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

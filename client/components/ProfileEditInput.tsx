@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, StyleSheet, TextInput } from 'react-native';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 interface ProfileEditInputProps {
   placeholder: string;
@@ -11,60 +12,60 @@ interface ProfileEditInputProps {
 
 const ProfileEditInput: React.FC<ProfileEditInputProps> = ({
   placeholder,
-  value,
+  value = '',
   onChangeText,
   isNumeric = false,
   multiline = false,
 }) => {
-  const [inputValue, setInputValue] = useState(value ?? '');
-
-  useEffect(() => {
-    setInputValue(value ?? '');
-  }, [value]);
-
-  const handleTextChange = (text: string) => {
-    setInputValue(text);
-    onChangeText(text);
-  };
+  const background = useThemeColor({}, 'secondaryBackground');
+  const border = useThemeColor({}, 'separator');
+  const text = useThemeColor({}, 'text');
+  const placeholderColor = useThemeColor({}, 'secondaryText');
 
   return (
-    <View style={styles.textInputContainer}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: background,
+          borderColor: border,
+        },
+      ]}
+    >
       <TextInput
+        value={value}
         placeholder={placeholder}
-        placeholderTextColor="#757575"
-        style={styles.textInput}
-        value={inputValue}
-        onChangeText={handleTextChange}
-
+        placeholderTextColor={placeholderColor}
+        style={[
+          styles.input,
+          { color: text },
+          multiline && styles.multiline,
+        ]}
+        onChangeText={onChangeText}
         inputMode={isNumeric ? 'numeric' : 'text'}
         keyboardType={isNumeric ? 'numeric' : 'default'}
-
         multiline={multiline}
+        textAlignVertical={multiline ? 'top' : 'center'}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  textInputContainer: {
-    minHeight: 50,
-    justifyContent: 'center',
-    backgroundColor: '#242424',
-    borderColor: '#757575',
-    borderRadius: 10,
+  container: {
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    marginHorizontal: 10,
-    marginBottom: 10,
-    flexGrow: 1,
-    flexShrink: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
   },
-  textInput: {
-    fontFamily: 'Roboto',
-    fontSize: 20,
+  input: {
+    fontSize: 16,
     fontWeight: '400',
-    color: '#FFFFFF',
-    paddingVertical: 5,
+    minHeight: 24,
+  },
+  multiline: {
+    minHeight: 120,
   },
 });
 

@@ -1,68 +1,67 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Divider } from './ui/Divider';
+import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
-interface ProfileEditSelectorProps {
+interface Props {
   options: string[];
   selected: string;
   onSelect: (value: string) => void;
 }
 
-const ProfileEditSelector: React.FC<ProfileEditSelectorProps> = ({
+const ProfileEditSelector: React.FC<Props> = ({
   options,
   selected,
   onSelect,
 }) => {
+  const card = useThemeColor({}, 'secondaryBackground');
+  const border = useThemeColor({}, 'separator');
+  const text = useThemeColor({}, 'text');
+  const secondary = useThemeColor({}, 'secondaryText');
+
   return (
-    <View style={styles.container}>
-      {options.map((field) => (
-        <TouchableOpacity
-        key={field}
-        style={[
-          styles.option,
-          selected === field && styles.selectedOption,
-        ]}
-        onPress={() => onSelect(field)}
-        >
-          <Divider />
-          <Text
-          style={[
-            styles.optionText,
-            selected === field && styles.selectedText,
-          ]}
+    <>
+      {options.map(option => {
+        const isSelected = selected === option;
+
+        return (
+          <TouchableOpacity
+            key={option}
+            onPress={() => onSelect(option)}
+            activeOpacity={0.85}
+            style={[
+              styles.option,
+              {
+                backgroundColor: card,
+                borderColor: isSelected ? text : border,
+              },
+            ]}
           >
-            {field}
-          </Text>
-          <Divider />
-        </TouchableOpacity>
-      ))}
-    </View>
+            <Text
+              style={[
+                styles.text,
+                { color: isSelected ? text : secondary },
+              ]}
+            >
+              {option}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexDirection: 'column',
-  },
   option: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
   },
-  selectedOption: {
-    backgroundColor: '#757575',
-  },
-  optionText: {
-    fontFamily: 'Roboto',
-    fontWeight: 400,
-    fontSize: 20,
-    color: '#FFF',
-    minHeight: 30,
-    alignItems: 'center',
-  },
-  selectedText: {
-    fontWeight: 'bold',
+  text: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

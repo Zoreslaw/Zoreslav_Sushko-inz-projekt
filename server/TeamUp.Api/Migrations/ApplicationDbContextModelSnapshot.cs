@@ -308,6 +308,40 @@ namespace TeamUp.Api.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("preference_languages");
 
+                    b.Property<string>("SteamAvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("steam_avatar_url");
+
+                    b.PrimitiveCollection<List<string>>("SteamCategories")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("steam_categories");
+
+                    b.Property<string>("SteamDisplayName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("steam_display_name");
+
+                    b.PrimitiveCollection<List<string>>("SteamGames")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("steam_games");
+
+                    b.Property<string>("SteamId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("steam_id");
+
+                    b.Property<DateTime?>("SteamLastSyncedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("steam_last_synced_at");
+
+                    b.Property<string>("SteamProfileUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("steam_profile_url");
+
                     b.Property<string>("ProviderId")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")

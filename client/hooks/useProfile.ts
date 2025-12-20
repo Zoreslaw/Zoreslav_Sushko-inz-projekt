@@ -16,6 +16,13 @@ export interface ProfileData {
   preferredGender: string;
   favoriteGames: string[];
   otherGames: string[];
+  steamId?: string;
+  steamDisplayName?: string;
+  steamProfileUrl?: string;
+  steamAvatarUrl?: string;
+  steamGames: string[];
+  steamCategories: string[];
+  steamLastSyncedAt?: string;
 }
 
 export interface ProfileUpdate {
@@ -61,6 +68,13 @@ export function useProfile(): UseProfileResult {
     preferredGender: '',
     favoriteGames: [],
     otherGames: [],
+    steamId: undefined,
+    steamDisplayName: undefined,
+    steamProfileUrl: undefined,
+    steamAvatarUrl: undefined,
+    steamGames: [],
+    steamCategories: [],
+    steamLastSyncedAt: undefined,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +114,13 @@ export function useProfile(): UseProfileResult {
         preferredGender: data.preferenceGender || '',
         favoriteGames: data.favoriteGames || [],
         otherGames: data.otherGames || [],
+        steamId: data.steamId,
+        steamDisplayName: data.steamDisplayName,
+        steamProfileUrl: data.steamProfileUrl,
+        steamAvatarUrl: data.steamAvatarUrl,
+        steamGames: data.steamGames || [],
+        steamCategories: data.steamCategories || [],
+        steamLastSyncedAt: data.steamLastSyncedAt,
       });
     } catch (err: any) {
       console.error('Error fetching profile:', err);

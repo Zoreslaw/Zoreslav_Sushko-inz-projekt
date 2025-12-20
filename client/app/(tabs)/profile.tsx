@@ -3,27 +3,29 @@ import { StyleSheet, View, ScrollView, Alert, Text } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { api } from '@/services/api';
+import { SubmitButton } from '@/components/button/SubmitButton';
 import { SignOutButton } from '@/components/button/SignOutButton';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useAuth } from '@/hooks/useAuth';
-import { useProfile, ProfileUpdate } from '@/hooks/useProfile';
-import ProfileHeader from '@/components/ProfileHeader';
+import { useProfile } from '@/hooks/useProfile';
 import ProfileBar from '@/components/ProfileBar';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import ProfileSubmenuItem from '@/components/ProfileSubmenuItem';
 import ProfileAnimatedSubmenu from '@/components/ProfileAnimatedSubmenu';
 import ProfileEditInput from '@/components/ProfileEditInput';
-import ProfileEditArrayInput from '@/components/ProfileEditArrayInput';
 import ProfileEditSelector from '@/components/ProfileEditSelector';
 import ProfileEditMultiSelector from '@/components/ProfileEditMultiSelector';
+import ProfileEditSearchableSelector from '@/components/ProfileEditSearchableSelector';
 import ProfileEditBottomSheet, { ProfileEditSheetRef } from '@/components/ProfileEditBottomSheet';
 import languageMapEn, { reverseLanguageMapEn } from '@/localization/languageMaps';
 
 
 export default function Profile() {
   const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const secondaryText = useThemeColor({}, 'secondaryText');
   const { user, signOut } = useAuth();
-  const { profile, loading, updateProfile } = useProfile();
+  const { profile, loading, updateProfile, refresh } = useProfile();
   const router = useRouter();
   const [isBioPressed, setIsBioPressed] = useState(false);
   const [isPreferencesPressed, setIsPreferencesPressed] = useState(false);
@@ -135,21 +137,28 @@ export default function Profile() {
   }
 
   const handleFavoriteCategory = () => {
-    let value = profile.favoriteCategory ?? '';
-  
+    let selected = profile.favoriteCategory ? [profile.favoriteCategory] : [];
+    const categorySource =
+      profile.steamCategories && profile.steamCategories.length > 0
+        ? { options: profile.steamCategories }
+        : { loadOptions: (query: string) => api.getSteamCatalog('categories', query) };
+
     openSheet({
       title: 'Favorite Category',
       content: (
-        <ProfileEditInput
-          value={value}
-          placeholder="Enter favorite category"
-          onChangeText={(v) => (value = v)}
+        <ProfileEditSearchableSelector
+          {...categorySource}
+          selected={selected}
+          single
+          placeholder="Search categories"
+          emptyText="No categories found"
+          onChange={(value) => (selected = value)}
         />
       ),
       onSubmit: async () => {
-        const trimmed = value.trim();
-        if (trimmed !== profile.favoriteCategory) {
-          await updateProfile({ favoriteCategory: trimmed });
+        const next = selected[0] ?? '';
+        if (next !== profile.favoriteCategory) {
+          await updateProfile({ favoriteCategory: next });
         }
         sheetRef.current?.close();
       },
@@ -252,21 +261,26 @@ export default function Profile() {
   
 
   const handlePreferredCategories = () => {
-    let value = [...(profile.preferredCategories ?? [])];
-  
+    let selected = [...(profile.preferredCategories ?? [])];
+    const categorySource =
+      profile.steamCategories && profile.steamCategories.length > 0
+        ? { options: profile.steamCategories }
+        : { loadOptions: (query: string) => api.getSteamCatalog('categories', query) };
+
     openSheet({
       title: 'Preferred Categories',
       content: (
-        <ProfileEditArrayInput
-          arrayItems={value}
-          placeholder="Enter categories"
-          onArrayItemsChange={(v) => (value = v)}
+        <ProfileEditSearchableSelector
+          {...categorySource}
+          selected={selected}
+          placeholder="Search categories"
+          emptyText="No categories found"
+          onChange={(value) => (selected = value)}
         />
       ),
-      useScrollView: false,
       onSubmit: async () => {
-        if (JSON.stringify(value) !== JSON.stringify(profile.preferredCategories)) {
-          await updateProfile({ preferenceCategories: value });
+        if (JSON.stringify(selected) !== JSON.stringify(profile.preferredCategories)) {
+          await updateProfile({ preferenceCategories: selected });
         }
         sheetRef.current?.close();
       },
@@ -379,21 +393,26 @@ export default function Profile() {
 
 
   const handleFavoriteGames = () => {
-    let value = [...(profile.favoriteGames ?? [])];
-  
+    let selected = [...(profile.favoriteGames ?? [])];
+    const gameSource =
+      profile.steamGames && profile.steamGames.length > 0
+        ? { options: profile.steamGames }
+        : { loadOptions: (query: string) => api.getSteamCatalog('games', query) };
+
     openSheet({
       title: 'Favorite Games',
       content: (
-        <ProfileEditArrayInput
-          arrayItems={value}
-          placeholder="Enter games"
-          onArrayItemsChange={(v) => (value = v)}
+        <ProfileEditSearchableSelector
+          {...gameSource}
+          selected={selected}
+          placeholder="Search games"
+          emptyText="No games found"
+          onChange={(value) => (selected = value)}
         />
       ),
-      useScrollView: false,
       onSubmit: async () => {
-        if (JSON.stringify(value) !== JSON.stringify(profile.favoriteGames)) {
-          await updateProfile({ favoriteGames: value });
+        if (JSON.stringify(selected) !== JSON.stringify(profile.favoriteGames)) {
+          await updateProfile({ favoriteGames: selected });
         }
         sheetRef.current?.close();
       },
@@ -402,24 +421,117 @@ export default function Profile() {
   
 
   const handleOtherGames = () => {
-    let value = [...(profile.otherGames ?? [])];
-  
+    let selected = [...(profile.otherGames ?? [])];
+    const gameSource =
+      profile.steamGames && profile.steamGames.length > 0
+        ? { options: profile.steamGames }
+        : { loadOptions: (query: string) => api.getSteamCatalog('games', query) };
+
     openSheet({
       title: 'Other Games',
       content: (
-        <ProfileEditArrayInput
-          arrayItems={value}
-          placeholder="Enter games"
-          onArrayItemsChange={(v) => (value = v)}
+        <ProfileEditSearchableSelector
+          {...gameSource}
+          selected={selected}
+          placeholder="Search games"
+          emptyText="No games found"
+          onChange={(value) => (selected = value)}
         />
       ),
-      useScrollView: false,
       onSubmit: async () => {
-        if (JSON.stringify(value) !== JSON.stringify(profile.otherGames)) {
-          await updateProfile({ otherGames: value });
+        if (JSON.stringify(selected) !== JSON.stringify(profile.otherGames)) {
+          await updateProfile({ otherGames: selected });
         }
         sheetRef.current?.close();
       },
+    });
+  };
+
+  const handleSteamAccount = () => {
+    let value = '';
+    const isConnected = Boolean(profile.steamId);
+
+    const handleConnect = async () => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        Alert.alert('Invalid Steam ID', 'Please enter a Steam ID or profile URL.');
+        return;
+      }
+
+      try {
+        await api.connectSteam(trimmed);
+        await refresh();
+        sheetRef.current?.close();
+      } catch (error: any) {
+        Alert.alert('Steam connect failed', error?.message ?? 'Unable to connect Steam account.');
+      }
+    };
+
+    const handleSync = async () => {
+      try {
+        await api.syncSteam();
+        await refresh();
+        sheetRef.current?.close();
+      } catch (error: any) {
+        Alert.alert('Steam sync failed', error?.message ?? 'Unable to sync Steam account.');
+      }
+    };
+
+    const handleDisconnect = async () => {
+      try {
+        await api.disconnectSteam();
+        await refresh();
+        sheetRef.current?.close();
+      } catch (error: any) {
+        Alert.alert('Steam disconnect failed', error?.message ?? 'Unable to disconnect Steam account.');
+      }
+    };
+
+    openSheet({
+      title: 'Steam Account',
+      content: (
+        <View>
+          {isConnected ? (
+            <View style={styles.steamSection}>
+              <Text style={[styles.steamTitle, { color: textColor }]}>
+                Connected as {profile.steamDisplayName || profile.steamId}
+              </Text>
+              {profile.steamGames.length > 0 && (
+                <Text style={[styles.steamMeta, { color: secondaryText }]}>
+                  Games loaded: {profile.steamGames.length}
+                </Text>
+              )}
+              {profile.steamCategories.length > 0 && (
+                <Text style={[styles.steamMeta, { color: secondaryText }]}>
+                  Categories loaded: {profile.steamCategories.length}
+                </Text>
+              )}
+              {profile.steamLastSyncedAt && (
+                <Text style={[styles.steamMeta, { color: secondaryText }]}>
+                  Last sync: {new Date(profile.steamLastSyncedAt).toLocaleString()}
+                </Text>
+              )}
+              <View style={styles.steamButtons}>
+                <SubmitButton label="Sync Games" onPress={handleSync} style={styles.steamButton} />
+                <SubmitButton label="Disconnect" onPress={handleDisconnect} style={styles.steamButton} />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.steamSection}>
+              <ProfileEditInput
+                placeholder="Steam profile URL or SteamID64"
+                onChangeText={(v) => (value = v)}
+              />
+              <Text style={[styles.steamMeta, { color: secondaryText }]}>
+                We will import your owned games and categories.
+              </Text>
+              <View style={styles.steamButtons}>
+                <SubmitButton label="Connect Steam" onPress={handleConnect} style={styles.steamButton} />
+              </View>
+            </View>
+          )}
+        </View>
+      ),
     });
   };
 
@@ -478,6 +590,11 @@ export default function Profile() {
           <ProfileAnimatedSubmenu isExpanded={isGamesPressed}>
             <ProfileSubmenuItem title='Favorite Games' contents={profile?.favoriteGames || []} onPress={handleFavoriteGames} />
             <ProfileSubmenuItem title='Other Games' contents={profile?.otherGames || []} onPress={handleOtherGames} />
+            <ProfileSubmenuItem
+              title='Steam Account'
+              contents={[profile?.steamDisplayName || profile?.steamId || 'Not connected']}
+              onPress={handleSteamAccount}
+            />
           </ProfileAnimatedSubmenu>
           <ProfileMenuItem title="Settings" iconName="settings" isPressed={isSettingsPressed} onPress={handleSettings} />
         </ScrollView>
@@ -508,5 +625,24 @@ const styles = StyleSheet.create({
   },
   signOutButton: {
     marginBottom: 10,
-  }
+  },
+  steamSection: {
+    marginTop: 4,
+  },
+  steamTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  steamMeta: {
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  steamButtons: {
+    marginTop: 8,
+  },
+  steamButton: {
+    width: '100%',
+    marginBottom: 10,
+  },
 })

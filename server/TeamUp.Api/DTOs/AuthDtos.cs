@@ -52,6 +52,13 @@ public class UserProfileResponse
     public string? PreferenceGender { get; set; }
     public int? PreferenceAgeMin { get; set; }
     public int? PreferenceAgeMax { get; set; }
+    public string? SteamId { get; set; }
+    public string? SteamDisplayName { get; set; }
+    public string? SteamProfileUrl { get; set; }
+    public string? SteamAvatarUrl { get; set; }
+    public List<string> SteamGames { get; set; } = new();
+    public List<string> SteamCategories { get; set; } = new();
+    public DateTime? SteamLastSyncedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

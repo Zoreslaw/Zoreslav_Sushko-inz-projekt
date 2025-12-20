@@ -41,6 +41,13 @@ export interface UserProfile {
   preferenceGender?: string;
   preferenceAgeMin?: number;
   preferenceAgeMax?: number;
+  steamId?: string;
+  steamDisplayName?: string;
+  steamProfileUrl?: string;
+  steamAvatarUrl?: string;
+  steamGames?: string[];
+  steamCategories?: string[];
+  steamLastSyncedAt?: string;
   createdAt: string;
 }
 
@@ -342,6 +349,33 @@ class ApiClient {
     return response.json();
   }
 
+  // ============ STEAM ENDPOINTS ============
+
+  async connectSteam(steamIdOrUrl: string): Promise<UserProfile> {
+    return this.request<UserProfile>('/api/steam/connect', {
+      method: 'POST',
+      body: JSON.stringify({ steamIdOrUrl }),
+    });
+  }
+
+  async disconnectSteam(): Promise<UserProfile> {
+    return this.request<UserProfile>('/api/steam/disconnect', {
+      method: 'POST',
+    });
+  }
+
+  async syncSteam(): Promise<UserProfile> {
+    return this.request<UserProfile>('/api/steam/sync', {
+      method: 'POST',
+    });
+  }
+
+  async getSteamCatalog(type: 'games' | 'categories', query = '', limit = 60): Promise<string[]> {
+    const params = `type=${encodeURIComponent(type)}&query=${encodeURIComponent(query)}&limit=${limit}`;
+    const response = await this.request<{ items: string[] }>(`/api/steam/catalog?${params}`);
+    return response.items || [];
+  }
+
   // ============ MATCHES ENDPOINTS ============
 
   async getMatches(limit = 50): Promise<MatchUser[]> {
@@ -433,4 +467,3 @@ class ApiClient {
 
 // Export singleton instance
 export const api = new ApiClient();
-

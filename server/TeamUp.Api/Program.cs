@@ -18,11 +18,16 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "TeamUp API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token",
+        Description = "JWT Authorization header using the Bearer scheme.\n\n" +
+                      "1. First, use POST /api/auth/login to get your access token\n" +
+                      "2. Click 'Authorize' button above\n" +
+                      "3. Enter: Bearer YOUR_TOKEN_HERE (include the word 'Bearer' and a space before the token)\n" +
+                      "4. Click 'Authorize' and 'Close'",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Scheme = "Bearer",
+        BearerFormat = "JWT"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {

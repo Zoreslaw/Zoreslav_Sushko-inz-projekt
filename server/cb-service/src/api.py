@@ -33,6 +33,15 @@ class UserProfile(BaseModel):
     gender: str
     games: List[str] = Field(default_factory=list)
     languages: List[str] = Field(default_factory=list)
+    favoriteCategory: Optional[str] = None
+    preferenceCategories: List[str] = Field(default_factory=list)
+    preferenceLanguages: List[str] = Field(default_factory=list)
+    otherGames: List[str] = Field(default_factory=list)
+    steamGames: List[str] = Field(default_factory=list)
+    steamCategories: List[str] = Field(default_factory=list)
+    preferenceGender: Optional[str] = None
+    preferenceAgeMin: Optional[int] = None
+    preferenceAgeMax: Optional[int] = None
 
 class RecommendationRequest(BaseModel):
     targetUser: UserProfile
@@ -53,6 +62,23 @@ class RecommendationResponse(BaseModel):
     processingTimeMs: int
     totalCandidates: int
 
+def _merge_unique(*items: List[str]) -> List[str]:
+    """Merge multiple string lists while preserving order and removing empties."""
+    seen = set()
+    out: List[str] = []
+    for arr in items:
+        if not arr:
+            continue
+        for val in arr:
+            if val is None:
+                continue
+            item = str(val).strip()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+    return out
+
 def _user_profile_to_user(
     profile: UserProfile,
     all_users: Optional[List[User]] = None,
@@ -64,22 +90,60 @@ def _user_profile_to_user(
     if all_users:
         cached = next((u for u in all_users if u.id == profile.id), None)
         if cached:
-            user = cached
+            merged_games = _merge_unique(
+                cached.favorite_games,
+                profile.games,
+                profile.otherGames,
+                profile.steamGames
+            )
+            merged_languages = _merge_unique(cached.languages, profile.languages)
+            merged_pref_categories = _merge_unique(
+                cached.preference_categories,
+                profile.preferenceCategories,
+                profile.steamCategories
+            )
+            merged_pref_languages = _merge_unique(
+                cached.preference_languages,
+                profile.preferenceLanguages
+            )
+            user = replace(
+                cached,
+                favorite_games=merged_games,
+                languages=merged_languages,
+                favorite_category=profile.favoriteCategory or cached.favorite_category,
+                preference_categories=merged_pref_categories,
+                preference_languages=merged_pref_languages,
+                preference_gender=profile.preferenceGender or cached.preference_gender,
+                preference_age_min=profile.preferenceAgeMin if profile.preferenceAgeMin is not None else cached.preference_age_min,
+                preference_age_max=profile.preferenceAgeMax if profile.preferenceAgeMax is not None else cached.preference_age_max,
+            )
         else:
             user = User(
                 id=profile.id,
                 age=profile.age,
                 gender=profile.gender,
-                favorite_games=profile.games,
-                languages=profile.languages,
+                favorite_category=profile.favoriteCategory,
+                preference_gender=profile.preferenceGender,
+                preference_age_min=profile.preferenceAgeMin,
+                preference_age_max=profile.preferenceAgeMax,
+                favorite_games=_merge_unique(profile.games, profile.otherGames, profile.steamGames),
+                languages=_merge_unique(profile.languages),
+                preference_categories=_merge_unique(profile.preferenceCategories, profile.steamCategories),
+                preference_languages=_merge_unique(profile.preferenceLanguages),
             )
     else:
         user = User(
             id=profile.id,
             age=profile.age,
             gender=profile.gender,
-            favorite_games=profile.games,
-            languages=profile.languages,
+            favorite_category=profile.favoriteCategory,
+            preference_gender=profile.preferenceGender,
+            preference_age_min=profile.preferenceAgeMin,
+            preference_age_max=profile.preferenceAgeMax,
+            favorite_games=_merge_unique(profile.games, profile.otherGames, profile.steamGames),
+            languages=_merge_unique(profile.languages),
+            preference_categories=_merge_unique(profile.preferenceCategories, profile.steamCategories),
+            preference_languages=_merge_unique(profile.preferenceLanguages),
         )
 
     if liked_override is None and disliked_override is None:

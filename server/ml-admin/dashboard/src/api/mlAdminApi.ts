@@ -257,6 +257,42 @@ export const mlAdminApi = {
     return await response.json();
   },
 
+  async uploadModel(
+    file: File,
+    options?: { activate?: boolean; version?: string }
+  ): Promise<{
+    message: string;
+    version: string;
+    model_path: string;
+    activated?: boolean;
+    reloaded_status?: number | null;
+  }> {
+    const baseUrl = (import.meta as any)?.env?.VITE_ADMIN_API_URL?.replace(/\/+$/, '') || '';
+    const url = `${baseUrl}/api/models/upload`;
+    const formData = new FormData();
+    formData.append('file', file);
+    if (options?.activate) {
+      formData.append('activate', 'true');
+    }
+    if (options?.version) {
+      formData.append('version', options.version);
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      const msg = body?.error || body?.message || `HTTP ${response.status}`;
+      throw new ApiError(msg, response.status, body);
+    }
+
+    return await response.json();
+  },
+
   // ---- Training Control ----
   async stopTraining(): Promise<{ message: string }> {
     return fetchJSON('/api/training/stop', 'POST');

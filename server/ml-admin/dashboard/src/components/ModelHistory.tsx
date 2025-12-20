@@ -23,13 +23,15 @@ import {
   IconButton,
   Tooltip,
   Snackbar,
+  Checkbox,
+  FormControlLabel,
+  TextField,
 } from '@mui/material';
 import {
   CheckCircle,
   Visibility,
-  PlayArrow,
   SwapHoriz,
-  Error as ErrorIcon,
+  CloudUpload,
 } from '@mui/icons-material';
 import { mlAdminApi, ModelHistoryItem } from '../api/mlAdminApi';
 
@@ -50,6 +52,11 @@ export const ModelHistory: React.FC = () => {
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
   const [modelToActivate, setModelToActivate] = useState<ModelHistoryItem | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [activateOnUpload, setActivateOnUpload] = useState(false);
+  const [versionOverride, setVersionOverride] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const fetchModels = useCallback(async (pageNum: number) => {
     try {
@@ -116,6 +123,33 @@ export const ModelHistory: React.FC = () => {
     }
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      setUploadError(null);
+      const result = await mlAdminApi.uploadModel(file, {
+        activate: activateOnUpload,
+        version: versionOverride.trim() || undefined,
+      });
+      setSuccessMessage(
+        `Model ${result.version} uploaded${result.activated ? ' and activated' : ''}.`
+      );
+      await fetchModels(page);
+    } catch (e: any) {
+      setUploadError(e.message ?? 'Failed to upload model');
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'success':
@@ -151,6 +185,47 @@ export const ModelHistory: React.FC = () => {
               Total: {total} models
             </Typography>
           </Box>
+
+          <Box display="flex" alignItems="center" gap={2} mb={2} flexWrap="wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pt"
+              style={{ display: 'none' }}
+              onChange={handleFileSelected}
+            />
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={uploading ? <CircularProgress size={18} /> : <CloudUpload />}
+              disabled={uploading}
+              onClick={handleUploadClick}
+            >
+              {uploading ? 'Uploading...' : 'Upload Model'}
+            </Button>
+            <TextField
+              size="small"
+              label="Version (optional)"
+              placeholder="YYYYMMDD_HHMMSS_collab"
+              value={versionOverride}
+              onChange={(e) => setVersionOverride(e.target.value)}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={activateOnUpload}
+                  onChange={(e) => setActivateOnUpload(e.target.checked)}
+                />
+              }
+              label="Activate after upload"
+            />
+          </Box>
+
+          {uploadError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setUploadError(null)}>
+              {uploadError}
+            </Alert>
+          )}
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -358,6 +433,5 @@ export const ModelHistory: React.FC = () => {
     </>
   );
 };
-
 
 

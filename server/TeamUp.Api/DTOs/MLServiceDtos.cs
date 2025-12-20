@@ -17,6 +17,15 @@ public class UserProfile
     public string Gender { get; set; } = string.Empty;
     public List<string> Games { get; set; } = new();
     public List<string> Languages { get; set; } = new();
+    public string? FavoriteCategory { get; set; }
+    public List<string> PreferenceCategories { get; set; } = new();
+    public List<string> PreferenceLanguages { get; set; } = new();
+    public List<string> OtherGames { get; set; } = new();
+    public List<string> SteamGames { get; set; } = new();
+    public List<string> SteamCategories { get; set; } = new();
+    public string? PreferenceGender { get; set; }
+    public int? PreferenceAgeMin { get; set; }
+    public int? PreferenceAgeMax { get; set; }
 }
 
 public class MLRecommendationResponse

@@ -25,9 +25,12 @@ class BackendUserRow:
     preference_age_min: Optional[int] = None
     preference_age_max: Optional[int] = None
     favorite_games: Optional[str] = None
+    other_games: Optional[str] = None
     languages: Optional[str] = None
     preference_categories: Optional[str] = None
     preference_languages: Optional[str] = None
+    steam_games: Optional[str] = None
+    steam_categories: Optional[str] = None
     liked: Optional[str] = None
     disliked: Optional[str] = None
     created_at: Optional[str] = None
@@ -187,16 +190,23 @@ def map_backend_to_user(row: BackendUserRow) -> User:
     """Convert BackendUserRow (raw strings from DB/API) to normalized domain User."""
     # Parse PG-array-like fields into lists
     games_raw                = _coerce_array_field(row.favorite_games)
+    other_games_raw          = _coerce_array_field(row.other_games)
     langs_ui_raw             = _coerce_array_field(row.languages)
     pref_cats_raw            = _coerce_array_field(row.preference_categories)
     pref_langs_raw           = _coerce_array_field(row.preference_languages)
     liked_raw                = _coerce_array_field(row.liked)
     disliked_raw             = _coerce_array_field(row.disliked)
+    steam_games_raw          = _coerce_array_field(row.steam_games)
+    steam_cats_raw           = _coerce_array_field(row.steam_categories)
 
     # Normalize lists
-    favorite_games           = _dedup_keep_order([x.strip() for x in games_raw if x and x.strip()])
+    favorite_games           = _dedup_keep_order([
+        x.strip() for x in (games_raw + other_games_raw + steam_games_raw) if x and x.strip()
+    ])
     languages                = _normalize_langs(langs_ui_raw)
-    preference_categories    = _dedup_keep_order([x.strip() for x in pref_cats_raw if x and x.strip()])
+    preference_categories    = _dedup_keep_order([
+        x.strip() for x in (pref_cats_raw + steam_cats_raw) if x and x.strip()
+    ])
     preference_languages     = _normalize_langs(pref_langs_raw)
     liked                    = _dedup_keep_order([x.strip() for x in liked_raw if x and x.strip()])
     disliked                 = _dedup_keep_order([x.strip() for x in disliked_raw if x and x.strip()])
@@ -283,9 +293,12 @@ def fetch_users_api(api_url: str, timeout: float = 10.0) -> List[User]:
             preference_age_min=_to_int(_get_any(item, ["preference_age_min", "preferenceAgeMin"])),
             preference_age_max=_to_int(_get_any(item, ["preference_age_max", "preferenceAgeMax"])),
             favorite_games=_get_any(item, ["favorite_games", "favoriteGames"]),
+            other_games=_get_any(item, ["other_games", "otherGames"]),
             languages=_get_any(item, ["languages"]),
             preference_categories=_get_any(item, ["preference_categories", "preferenceCategories"]),
             preference_languages=_get_any(item, ["preference_languages", "preferenceLanguages"]),
+            steam_games=_get_any(item, ["steam_games", "steamGames"]),
+            steam_categories=_get_any(item, ["steam_categories", "steamCategories"]),
             liked=_get_any(item, ["liked"]),
             disliked=_get_any(item, ["disliked"]),
             created_at=_get_any(item, ["created_at", "createdAt"]),

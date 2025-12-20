@@ -352,6 +352,10 @@ checkpoints/
 weights/
 *.hdf5
 
+# Allow code under server/network/models (package code, not model artifacts)
+!server/network/models/
+!server/network/models/**
+
 # ============================================
 # Docker
 # ============================================

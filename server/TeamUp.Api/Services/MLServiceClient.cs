@@ -96,7 +96,16 @@ public class MLServiceClient
             Age = user.Age,
             Gender = user.Gender,
             Games = user.FavoriteGames,
-            Languages = user.Languages
+            Languages = user.Languages,
+            FavoriteCategory = user.FavoriteCategory,
+            PreferenceCategories = user.PreferenceCategories,
+            PreferenceLanguages = user.PreferenceLanguages,
+            OtherGames = user.OtherGames,
+            SteamGames = user.SteamGames,
+            SteamCategories = user.SteamCategories,
+            PreferenceGender = user.PreferenceGender,
+            PreferenceAgeMin = user.PreferenceAgeMin,
+            PreferenceAgeMax = user.PreferenceAgeMax
         };
     }
 }

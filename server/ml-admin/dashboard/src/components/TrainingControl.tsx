@@ -97,31 +97,65 @@ export const TrainingControl: React.FC = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
 
-        {status?.last_training && (
+        {(status?.last_success || status?.last_training) && (
           <Box mb={2}>
-            <Typography variant="subtitle2" color="text.secondary">Last Training:</Typography>
+            <Typography variant="subtitle2" color="text.secondary">Last Successful Training:</Typography>
             <Box mt={1}>
-              <Typography variant="body2">
-                <strong>Status:</strong>{' '}
-                {status.last_training.status === 'success' ? (
-                  <Chip label="Success" color="success" size="small" />
-                ) : (
-                  <Chip icon={<ErrorIcon />} label="Error" color="error" size="small" />
-                )}
-              </Typography>
-              {status.last_training.timestamp && (
-                <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(status.last_training.timestamp).toLocaleString()}</Typography>
+              {status.last_success ? (
+                <>
+                  <Typography variant="body2">
+                    <strong>Status:</strong> <Chip label="Success" color="success" size="small" />
+                  </Typography>
+                  {status.last_success.timestamp && (
+                    <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(status.last_success.timestamp).toLocaleString()}</Typography>
+                  )}
+                  {typeof status.last_success.num_users === 'number' && (
+                    <Typography variant="body2" mt={1}><strong>Users:</strong> {status.last_success.num_users}</Typography>
+                  )}
+                  {typeof status.last_success.num_interactions === 'number' && (
+                    <Typography variant="body2" mt={1}><strong>Interactions:</strong> {status.last_success.num_interactions}</Typography>
+                  )}
+                  {typeof status.last_success.duration_seconds === 'number' && (
+                    <Typography variant="body2" mt={1}><strong>Duration:</strong> {status.last_success.duration_seconds.toFixed(1)}s</Typography>
+                  )}
+                </>
+              ) : status.last_training ? (
+                <>
+                  <Typography variant="body2">
+                    <strong>Status:</strong>{' '}
+                    {status.last_training.status === 'success' ? (
+                      <Chip label="Success" color="success" size="small" />
+                    ) : (
+                      <Chip icon={<ErrorIcon />} label="Error" color="error" size="small" />
+                    )}
+                  </Typography>
+                  {status.last_training.timestamp && (
+                    <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(status.last_training.timestamp).toLocaleString()}</Typography>
+                  )}
+                  {typeof status.last_training.num_users === 'number' && (
+                    <Typography variant="body2" mt={1}><strong>Users:</strong> {status.last_training.num_users}</Typography>
+                  )}
+                  {typeof status.last_training.num_interactions === 'number' && (
+                    <Typography variant="body2" mt={1}><strong>Interactions:</strong> {status.last_training.num_interactions}</Typography>
+                  )}
+                  {typeof status.last_training.duration_seconds === 'number' && (
+                    <Typography variant="body2" mt={1}><strong>Duration:</strong> {status.last_training.duration_seconds.toFixed(1)}s</Typography>
+                  )}
+                  {status.last_training.error && <Alert severity="error" sx={{ mt: 1 }}>{status.last_training.error}</Alert>}
+                </>
+              ) : null}
+            </Box>
+          </Box>
+        )}
+
+        {status?.last_error && (
+          <Box mb={2}>
+            <Typography variant="subtitle2" color="text.secondary">Last Error:</Typography>
+            <Box mt={1}>
+              {status.last_error.timestamp && (
+                <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(status.last_error.timestamp).toLocaleString()}</Typography>
               )}
-              {typeof status.last_training.num_users === 'number' && (
-                <Typography variant="body2" mt={1}><strong>Users:</strong> {status.last_training.num_users}</Typography>
-              )}
-              {typeof status.last_training.num_interactions === 'number' && (
-                <Typography variant="body2" mt={1}><strong>Interactions:</strong> {status.last_training.num_interactions}</Typography>
-              )}
-              {typeof status.last_training.duration_seconds === 'number' && (
-                <Typography variant="body2" mt={1}><strong>Duration:</strong> {status.last_training.duration_seconds.toFixed(1)}s</Typography>
-              )}
-              {status.last_training.error && <Alert severity="error" sx={{ mt: 1 }}>{status.last_training.error}</Alert>}
+              {status.last_error.error && <Alert severity="error" sx={{ mt: 1 }}>{status.last_error.error}</Alert>}
             </Box>
           </Box>
         )}

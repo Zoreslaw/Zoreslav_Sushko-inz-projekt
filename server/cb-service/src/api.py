@@ -1,6 +1,7 @@
 import os
 import logging
 import sys
+from dataclasses import replace
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from fastapi import FastAPI, HTTPException
@@ -37,6 +38,9 @@ class RecommendationRequest(BaseModel):
     targetUser: UserProfile
     candidates: List[UserProfile] = Field(default_factory=list)
     topK: int = Field(default=20, ge=1, le=100)
+    mode: str = Field(default="feedback")
+    targetLikedIds: Optional[List[str]] = None
+    targetDislikedIds: Optional[List[str]] = None
 
 class RecommendationResult(BaseModel):
     userId: str
@@ -49,21 +53,42 @@ class RecommendationResponse(BaseModel):
     processingTimeMs: int
     totalCandidates: int
 
-def _user_profile_to_user(profile: UserProfile, all_users: Optional[List[User]] = None) -> User:
+def _user_profile_to_user(
+    profile: UserProfile,
+    all_users: Optional[List[User]] = None,
+    liked_override: Optional[List[str]] = None,
+    disliked_override: Optional[List[str]] = None
+) -> User:
     """Convert UserProfile to User domain model."""
     # Try to find full user data from cache if available
     if all_users:
         cached = next((u for u in all_users if u.id == profile.id), None)
         if cached:
-            return cached
-    
-    # Otherwise create minimal User from profile
-    return User(
-        id=profile.id,
-        age=profile.age,
-        gender=profile.gender,
-        favorite_games=profile.games,
-        languages=profile.languages,
+            user = cached
+        else:
+            user = User(
+                id=profile.id,
+                age=profile.age,
+                gender=profile.gender,
+                favorite_games=profile.games,
+                languages=profile.languages,
+            )
+    else:
+        user = User(
+            id=profile.id,
+            age=profile.age,
+            gender=profile.gender,
+            favorite_games=profile.games,
+            languages=profile.languages,
+        )
+
+    if liked_override is None and disliked_override is None:
+        return user
+
+    return replace(
+        user,
+        liked=list(liked_override if liked_override is not None else user.liked),
+        disliked=list(disliked_override if disliked_override is not None else user.disliked),
     )
 
 @app.on_event("startup")
@@ -156,15 +181,25 @@ async def recommend(request: RecommendationRequest):
                 )
         
         # Convert profiles to User objects
-        target_user = _user_profile_to_user(request.targetUser, users_cache)
+        target_user = _user_profile_to_user(
+            request.targetUser,
+            users_cache,
+            liked_override=request.targetLikedIds,
+            disliked_override=request.targetDislikedIds
+        )
         candidates = [_user_profile_to_user(c, users_cache) for c in request.candidates]
         
         # Generate recommendations (using feedback mode by default)
+        mode = request.mode or "feedback"
+        if mode not in ("strict", "feedback"):
+            logger.warning("[api] Unknown mode '%s', defaulting to feedback", mode)
+            mode = "feedback"
+
         recommendations = recommender.recommend(
             target_user=target_user,
             candidates=candidates,
             top_k=request.topK,
-            mode="feedback"  # Can be made configurable
+            mode=mode
         )
         
         # Convert to response format
@@ -261,4 +296,3 @@ async def calculate_metrics_endpoint(request: Dict[str, Any]):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5001)
-

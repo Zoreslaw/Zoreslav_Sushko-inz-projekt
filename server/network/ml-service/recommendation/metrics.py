@@ -30,7 +30,7 @@ def recall_at_k(relevant: Set[int], recommended: List[int], k: int) -> float:
     if len(relevant) == 0:
         return 0.0
     
-    top_k = set(recommended[:k])
+    top_k = set(recommended[:min(k, len(recommended))])
     hits = len(relevant & top_k)
     return hits / len(relevant)
 
@@ -49,10 +49,13 @@ def precision_at_k(relevant: Set[int], recommended: List[int], k: int) -> float:
     """
     if k == 0:
         return 0.0
-    
-    top_k = set(recommended[:k])
+    effective_k = min(k, len(recommended))
+    if effective_k == 0:
+        return 0.0
+
+    top_k = set(recommended[:effective_k])
     hits = len(relevant & top_k)
-    return hits / k
+    return hits / effective_k
 
 
 def ndcg_at_k(relevant: Set[int], recommended: List[int], k: int) -> float:
@@ -113,8 +116,19 @@ def hit_rate_at_k(relevant: Set[int], recommended: List[int], k: int) -> float:
     Returns:
         1.0 if hit, 0.0 otherwise
     """
-    top_k = set(recommended[:k])
+    top_k = set(recommended[:min(k, len(recommended))])
     return 1.0 if len(relevant & top_k) > 0 else 0.0
+
+
+def _normalize_recommendations(recommended: List[int]) -> List[int]:
+    seen = set()
+    normalized = []
+    for item_id in recommended:
+        if item_id is None or item_id in seen:
+            continue
+        seen.add(item_id)
+        normalized.append(item_id)
+    return normalized
 
 
 def average_precision(relevant: Set[int], recommended: List[int]) -> float:
@@ -160,14 +174,16 @@ def compute_all_metrics(
     """
     metrics = {}
     
+    normalized = _normalize_recommendations(recommended)
+
     for k in k_values:
-        metrics[f'recall@{k}'] = recall_at_k(relevant, recommended, k)
-        metrics[f'precision@{k}'] = precision_at_k(relevant, recommended, k)
-        metrics[f'ndcg@{k}'] = ndcg_at_k(relevant, recommended, k)
-        metrics[f'hit_rate@{k}'] = hit_rate_at_k(relevant, recommended, k)
+        metrics[f'recall@{k}'] = recall_at_k(relevant, normalized, k)
+        metrics[f'precision@{k}'] = precision_at_k(relevant, normalized, k)
+        metrics[f'ndcg@{k}'] = ndcg_at_k(relevant, normalized, k)
+        metrics[f'hit_rate@{k}'] = hit_rate_at_k(relevant, normalized, k)
     
-    metrics['mrr'] = mean_reciprocal_rank(relevant, recommended)
-    metrics['map'] = average_precision(relevant, recommended)
+    metrics['mrr'] = mean_reciprocal_rank(relevant, normalized)
+    metrics['map'] = average_precision(relevant, normalized)
     
     return metrics
 

@@ -17,6 +17,8 @@ export type LastTrainingLog = {
 export type TrainingStatus = {
   is_training: boolean;
   last_training?: LastTrainingLog | null;
+  last_success?: LastTrainingLog | null;
+  last_error?: LastTrainingLog | null;
 };
 
 export type NextTrainingInfo = {
@@ -59,6 +61,27 @@ export type AggregateMetricsResponse = {
   avgHitRateAtK?: Record<number, number>;
   avgMutualAcceptRateAtK?: Record<number, number>;
   avgChatStartRateAtK?: Record<number, number>;
+  evaluation?: MetricsEvaluationMetadata;
+};
+
+export type MetricsEvaluationMetadata = {
+  holdoutStrategy?: string;
+  holdoutFraction?: number;
+  holdoutSize?: number;
+  candidateConstruction?: string;
+  aggregation?: string;
+  precisionDenominator?: string;
+  chatStartDefinition?: string;
+  sampleSize?: number;
+  maxUsersEvaluated?: number;
+  userSelection?: string;
+  minLikesForEval?: number;
+  minHoldoutSize?: number;
+  averageHoldoutSize?: number;
+  averageCandidateCount?: number;
+  averageEligibleLikedCount?: number;
+  usersConsidered?: number;
+  usersSkipped?: number;
 };
 
 

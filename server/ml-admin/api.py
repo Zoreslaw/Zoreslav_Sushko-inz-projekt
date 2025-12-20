@@ -8,6 +8,7 @@ import os
 import json
 import time
 import subprocess
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional
@@ -63,6 +64,8 @@ redis_client = connect_redis()
 # -----------------------------------
 # Helpers
 # -----------------------------------
+_MODEL_VERSION_RE = re.compile(r'^(\d{8}_\d{6})(?:_[A-Za-z0-9-]+)?$')
+
 def _file_exists(path: str) -> bool:
     try:
         return os.path.exists(path)
@@ -156,9 +159,17 @@ def get_training_status():
     try:
         is_training = _process_running('train_from_db.py') or _recently_modified(CURRENT_TRAINING_LOG, 30)
         last_training = None
-        logs = _tail_json_lines(LOG_PATH, 1)
+        last_success = None
+        last_error = None
+        logs = _tail_json_lines(LOG_PATH, 200)
         if logs:
             last_training = logs[0]
+            for entry in logs:
+                status = (entry.get('status') or '').lower()
+                if status == 'success' and last_success is None:
+                    last_success = entry
+                if status == 'error' and last_error is None:
+                    last_error = entry
 
         # If the current log contains completion/skip, treat as idle.
         if _file_exists(CURRENT_TRAINING_LOG):
@@ -169,7 +180,12 @@ def get_training_status():
             except Exception:
                 pass
 
-        return jsonify({'is_training': bool(is_training), 'last_training': last_training}), 200
+        return jsonify({
+            'is_training': bool(is_training),
+            'last_training': last_training,
+            'last_success': last_success,
+            'last_error': last_error
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -444,7 +460,7 @@ def get_stats():
     try:
         conn = psycopg2.connect(
             host=os.getenv('DB_HOST', 'postgres'),
-            port=os.getenv('DB_PORT', '5433'),
+            port=os.getenv('DB_PORT', '5432'),
             database=os.getenv('DB_NAME', 'teamup'),
             user=os.getenv('DB_USER', 'teamup_user'),
             password=os.getenv('DB_PASSWORD', 'teamup_password'),
@@ -515,7 +531,7 @@ def get_models_history():
                     version = file_path.stem.replace('twotower_v6_', '')
                     
                     # Skip if version doesn't match timestamp pattern (should be YYYYMMDD_HHMMSS)
-                    if not version.replace('_', '').replace('-', '').isdigit() or len(version) < 15:
+                    if not _MODEL_VERSION_RE.match(version):
                         continue
                     
                     mtime = datetime.fromtimestamp(stat.st_mtime)

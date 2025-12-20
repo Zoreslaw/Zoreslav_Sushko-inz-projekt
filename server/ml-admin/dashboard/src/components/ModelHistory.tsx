@@ -56,12 +56,15 @@ export const ModelHistory: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await mlAdminApi.getModelsHistory(pageNum, ITEMS_PER_PAGE);
-      setModels(response.models);
-      setTotal(response.total);
-      setTotalPages(response.total_pages);
-      setPage(response.page);
+      setModels(response?.models || []);
+      setTotal(response?.total || 0);
+      setTotalPages(response?.total_pages || 1);
+      setPage(response?.page || pageNum);
     } catch (e: any) {
       setError(e.message ?? 'Failed to load model history');
+      setModels([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -126,7 +129,7 @@ export const ModelHistory: React.FC = () => {
     }
   };
 
-  if (loading && models.length === 0) {
+  if (loading && (!models || models.length === 0)) {
     return (
       <Card>
         <CardContent>
@@ -155,7 +158,7 @@ export const ModelHistory: React.FC = () => {
             </Alert>
           )}
 
-          {models.length === 0 ? (
+          {!models || models.length === 0 ? (
             <Alert severity="info">No models found. Start training to create models.</Alert>
           ) : (
             <>

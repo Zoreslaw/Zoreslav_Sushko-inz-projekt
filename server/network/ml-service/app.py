@@ -213,16 +213,28 @@ def calculate_metrics():
         
         if not recommended_ids:
             return jsonify({'error': 'recommendedIds is required'}), 400
+
+        def normalize(rec):
+            seen = set()
+            out = []
+            for uid in rec:
+                if not uid or uid in seen:
+                    continue
+                seen.add(uid)
+                out.append(uid)
+            return out
         
         # Import metrics calculation (simple implementation)
         def precision_at_k(rec, rel, k):
             if k == 0: return 0.0
-            top_k = rec[:k]
-            return sum(1 for uid in top_k if uid in rel) / k
+            effective_k = min(k, len(rec))
+            if effective_k == 0: return 0.0
+            top_k = rec[:effective_k]
+            return sum(1 for uid in top_k if uid in rel) / effective_k
         
         def recall_at_k(rec, rel, k):
             if len(rel) == 0: return 0.0
-            top_k = rec[:k]
+            top_k = rec[:min(k, len(rec))]
             return sum(1 for uid in top_k if uid in rel) / len(rel)
         
         def ndcg_at_k(rec, rel, k):
@@ -245,8 +257,10 @@ def calculate_metrics():
         
         def hit_rate_at_k(rec, rel, k):
             if len(rel) == 0: return 0.0
-            return 1.0 if any(uid in rel for uid in rec[:k]) else 0.0
+            return 1.0 if any(uid in rel for uid in rec[:min(k, len(rec))]) else 0.0
         
+        normalized = normalize(recommended_ids)
+
         results = {
             "precision": {},
             "recall": {},
@@ -257,14 +271,15 @@ def calculate_metrics():
         }
         
         for k in k_values:
-            results["precision"][k] = precision_at_k(recommended_ids, ground_truth, k)
-            results["recall"][k] = recall_at_k(recommended_ids, ground_truth, k)
-            results["ndcg"][k] = ndcg_at_k(recommended_ids, ground_truth, k)
-            results["hit_rate"][k] = hit_rate_at_k(recommended_ids, ground_truth, k)
+            results["precision"][k] = precision_at_k(normalized, ground_truth, k)
+            results["recall"][k] = recall_at_k(normalized, ground_truth, k)
+            results["ndcg"][k] = ndcg_at_k(normalized, ground_truth, k)
+            results["hit_rate"][k] = hit_rate_at_k(normalized, ground_truth, k)
             
-            top_k_set = set(recommended_ids[:k])
-            results["mutual_accept_rate"][k] = len(top_k_set & mutual_accepts) / k if k > 0 else 0.0
-            results["chat_start_rate"][k] = len(top_k_set & chat_starts) / k if k > 0 else 0.0
+            effective_k = min(k, len(normalized))
+            top_k_set = set(normalized[:effective_k])
+            results["mutual_accept_rate"][k] = len(top_k_set & mutual_accepts) / effective_k if effective_k > 0 else 0.0
+            results["chat_start_rate"][k] = len(top_k_set & chat_starts) / effective_k if effective_k > 0 else 0.0
         
         return jsonify(results), 200
     except Exception as e:

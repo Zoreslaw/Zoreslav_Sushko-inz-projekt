@@ -19,7 +19,7 @@ import {
   Grid,
 } from '@mui/material';
 import { Assessment, TrendingUp } from '@mui/icons-material';
-import { mlAdminApi } from '../api/mlAdminApi';
+import { mlAdminApi, MetricsEvaluationMetadata } from '../api/mlAdminApi';
 import { useAlgorithm } from '../contexts/AlgorithmContext';
 import { MetricsCharts } from './MetricsCharts';
 
@@ -39,6 +39,7 @@ interface MetricsData {
   hit_rate?: Record<number, number>;
   mutual_accept_rate?: Record<number, number>;
   chat_start_rate?: Record<number, number>;
+  evaluation?: MetricsEvaluationMetadata;
 }
 
 export const MetricsCard: React.FC = () => {
@@ -100,6 +101,16 @@ export const MetricsCard: React.FC = () => {
   const formatValue = (val: number | undefined) => {
     if (val === undefined) return '-';
     return (val * 100).toFixed(2) + '%';
+  };
+
+  const evaluation = metrics.evaluation;
+  const formatFraction = (val: number | undefined) => {
+    if (val === undefined) return '-';
+    return `${(val * 100).toFixed(0)}%`;
+  };
+  const formatNumber = (val: number | undefined) => {
+    if (val === undefined) return '-';
+    return val.toFixed(1);
   };
 
   return (
@@ -210,6 +221,19 @@ export const MetricsCard: React.FC = () => {
           </Typography>
         )}
 
+        {evaluation && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Eval: {evaluation.holdoutStrategy || 'n/a'} ({formatFraction(evaluation.holdoutFraction)} holdout),{' '}
+            agg={evaluation.aggregation || 'n/a'}, denom={evaluation.precisionDenominator || 'n/a'}
+            {evaluation.averageHoldoutSize !== undefined && (
+              <> · avg_holdout={formatNumber(evaluation.averageHoldoutSize)}</>
+            )}
+            {evaluation.averageCandidateCount !== undefined && (
+              <> · avg_candidates={formatNumber(evaluation.averageCandidateCount)}</>
+            )}
+          </Typography>
+        )}
+
         {/* Charts Section */}
         <Box mt={3}>
           <MetricsCharts metrics={metrics} title={`${currentAlgorithm} Metrics Trends`} />
@@ -218,4 +242,3 @@ export const MetricsCard: React.FC = () => {
     </Card>
   );
 };
-

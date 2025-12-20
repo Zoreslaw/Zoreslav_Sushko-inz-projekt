@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using TeamUp.Api.Data;
 using TeamUp.Api.DTOs;
 using TeamUp.Api.Models;
@@ -18,6 +20,12 @@ public class UsersController : ControllerBase
     private readonly AlgorithmService _algorithmService;
     private readonly MetricsService _metricsService;
     private readonly CsvImportService _csvImportService;
+    private const double DefaultHoldoutFraction = 0.2;
+    private const int DefaultMaxUsers = 100;
+    private const int DefaultMinLikesForEval = 5;
+    private const int DefaultMinHoldoutSize = 2;
+    private const string CandidateConstructionDescription =
+        "eligible_by_preferences_excluding_self_disliked_and_non_holdout_likes";
 
     public UsersController(
         ApplicationDbContext context, 
@@ -264,7 +272,9 @@ public class UsersController : ControllerBase
     [HttpPost("metrics/{userId}")]
     public async Task<ActionResult<MetricsResponse>> CalculateMetrics(
         string userId,
-        [FromBody] MetricsRequest? request = null)
+        [FromBody] MetricsRequest? request = null,
+        [FromQuery] int minLikes = DefaultMinLikesForEval,
+        [FromQuery] int minHoldoutSize = DefaultMinHoldoutSize)
     {
         try
         {
@@ -274,31 +284,68 @@ public class UsersController : ControllerBase
                 return NotFound(new { error = "User not found" });
             }
 
-            var kValues = request?.KValues ?? new List<int> { 5, 10, 20 };
+            if (!HasCompleteProfile(targetUser))
+            {
+                return BadRequest(new { error = "User profile incomplete for metrics evaluation" });
+            }
+
+            if (targetUser.Liked.Count < minLikes)
+            {
+                return BadRequest(new { error = "Not enough liked interactions available for metrics calculation" });
+            }
+
+            var kValues = NormalizeKValues(request?.KValues);
             var algorithm = _algorithmService.GetCurrentAlgorithm();
 
-            // Get recommendations using current algorithm
-            var candidates = await _context.Users
-                .Where(u => u.Id != userId && 
-                           !targetUser.Liked.Contains(u.Id) && 
-                           !targetUser.Disliked.Contains(u.Id))
-                .ToListAsync();
+            var allUsers = await _context.Users.ToListAsync();
+            var eligibleCandidates = BuildEligibleCandidates(targetUser, allUsers);
 
-            if (candidates.Count == 0)
+            if (eligibleCandidates.Count == 0)
             {
-                return BadRequest(new { error = "No candidates available for metrics calculation" });
+                return BadRequest(new { error = "No eligible candidates available for metrics calculation" });
+            }
+
+            var eligibleCandidateIds = eligibleCandidates.Select(u => u.Id).ToHashSet();
+            var eligibleLiked = targetUser.Liked
+                .Where(id => eligibleCandidateIds.Contains(id) && !targetUser.Disliked.Contains(id))
+                .Distinct()
+                .ToList();
+
+            if (eligibleLiked.Count < minLikes)
+            {
+                return BadRequest(new { error = "Not enough eligible liked users available for metrics calculation" });
+            }
+
+            var holdoutLiked = SelectHoldout(eligibleLiked, DefaultHoldoutFraction, minHoldoutSize, userId);
+            var remainingLiked = eligibleLiked.Where(id => !holdoutLiked.Contains(id)).ToList();
+            var eligibleLikedSet = eligibleLiked.ToHashSet();
+
+            var candidatesForEval = eligibleCandidates
+                .Where(u => !eligibleLikedSet.Contains(u.Id))
+                .ToList();
+            candidatesForEval.AddRange(eligibleCandidates.Where(u => holdoutLiked.Contains(u.Id)));
+            candidatesForEval = candidatesForEval.DistinctBy(u => u.Id).ToList();
+
+            if (candidatesForEval.Count == 0)
+            {
+                return BadRequest(new { error = "No evaluation candidates available after holdout construction" });
             }
 
             MLRecommendationResponse? mlResponse = null;
             if (algorithm.Equals("ContentBased", StringComparison.OrdinalIgnoreCase))
             {
                 mlResponse = await _cbServiceClient.GetRecommendationsAsync(
-                    targetUser, candidates, kValues.Max());
+                    targetUser,
+                    candidatesForEval,
+                    kValues.Max(),
+                    mode: "feedback",
+                    targetLikedIds: remainingLiked,
+                    targetDislikedIds: targetUser.Disliked);
             }
             else
             {
                 mlResponse = await _mlServiceClient.GetRecommendationsAsync(
-                    targetUser, candidates, kValues.Max());
+                    targetUser, candidatesForEval, kValues.Max());
             }
 
             if (mlResponse == null)
@@ -307,7 +354,20 @@ public class UsersController : ControllerBase
             }
 
             var recommendedIds = mlResponse.Results.Select(r => r.UserId).ToList();
-            var metrics = _metricsService.CalculateMetrics(userId, recommendedIds, kValues);
+            var likesByUserId = BuildLikesByUserId(allUsers);
+            var holdoutMutualAccepts = BuildHoldoutMutualAccepts(userId, holdoutLiked, likesByUserId);
+            var chatPartners = await GetChatPartnersAsync(new[] { userId });
+            var holdoutChatStarts = holdoutLiked
+                .Where(id => chatPartners.TryGetValue(userId, out var partners) && partners.Contains(id))
+                .ToHashSet();
+
+            var metrics = _metricsService.CalculateMetricsWithGroundTruth(
+                userId,
+                recommendedIds,
+                holdoutLiked,
+                kValues,
+                holdoutMutualAccepts,
+                holdoutChatStarts);
             metrics.Algorithm = algorithm;
 
             var response = new MetricsResponse
@@ -320,7 +380,25 @@ public class UsersController : ControllerBase
                 NDCGAtK = metrics.NDCGAtK,
                 HitRateAtK = metrics.HitRateAtK,
                 MutualAcceptRateAtK = metrics.MutualAcceptRateAtK,
-                ChatStartRateAtK = metrics.ChatStartRateAtK
+                ChatStartRateAtK = metrics.ChatStartRateAtK,
+                Evaluation = new MetricsEvaluationMetadata
+                {
+                    HoldoutStrategy = "fraction",
+                    HoldoutFraction = DefaultHoldoutFraction,
+                    HoldoutSize = holdoutLiked.Count,
+                    CandidateConstruction = CandidateConstructionDescription,
+                    Aggregation = "per_user",
+                    PrecisionDenominator = "min(k, rec_count)",
+                    ChatStartDefinition = "any_message_between_pair",
+                    UserSelection = "n/a",
+                    MinLikesForEval = minLikes,
+                    MinHoldoutSize = minHoldoutSize,
+                    AverageHoldoutSize = holdoutLiked.Count,
+                    AverageCandidateCount = candidatesForEval.Count,
+                    AverageEligibleLikedCount = eligibleLiked.Count,
+                    UsersConsidered = 1,
+                    UsersSkipped = 0
+                }
             };
 
             return Ok(response);
@@ -335,89 +413,93 @@ public class UsersController : ControllerBase
     [HttpGet("metrics/aggregate")]
     public async Task<ActionResult<AggregateMetricsResponse>> GetAggregateMetrics(
         [FromQuery] string? algorithm = null,
-        [FromQuery] List<int>? kValues = null)
+        [FromQuery] List<int>? kValues = null,
+        [FromQuery] int maxUsers = DefaultMaxUsers,
+        [FromQuery] int? sampleSeed = null,
+        [FromQuery] int minLikes = DefaultMinLikesForEval,
+        [FromQuery] int minHoldoutSize = DefaultMinHoldoutSize)
     {
         try
         {
             var currentAlgorithm = algorithm ?? _algorithmService.GetCurrentAlgorithm();
-            var kVals = kValues ?? new List<int> { 5, 10, 20 };
+            var kVals = NormalizeKValues(kValues);
+            maxUsers = Math.Clamp(maxUsers, 1, 500);
 
-            var users = await _context.Users
-                .Where(u => u.Liked.Count > 0) // Only users with interactions
-                .ToListAsync();
+            var allUsers = await _context.Users.ToListAsync();
+            var eligibleUsers = allUsers
+                .Where(u => u.Liked.Count > 0 && HasCompleteProfile(u))
+                .ToList();
 
-            if (users.Count == 0)
+            if (eligibleUsers.Count == 0)
             {
-                return BadRequest(new { error = "No users with interactions found" });
+                return BadRequest(new { error = "No users with interactions and complete profiles found" });
             }
 
-            var allMetrics = new List<RecommendationMetrics>();
-            var candidates = await _context.Users.ToListAsync();
+            var sampledUsers = SampleUsers(eligibleUsers, maxUsers, sampleSeed);
+            var likesByUserId = BuildLikesByUserId(allUsers);
+            var chatPartners = await GetChatPartnersAsync(sampledUsers.Select(u => u.Id));
 
-            foreach (var user in users.Take(100)) // Limit to 100 users for performance
+            var allMetrics = new List<RecommendationMetrics>();
+            var totalEligibleLiked = 0;
+            var totalHoldout = 0;
+            var totalCandidates = 0;
+            var usersConsidered = 0;
+            var usersSkipped = 0;
+
+            foreach (var user in sampledUsers)
             {
                 try
                 {
-                    // For evaluation, we need to include some liked users in candidates
-                    // to measure if the algorithm would have recommended them
-                    // We'll use a holdout approach: exclude 20% of liked users for evaluation
-                    var likedUsers = user.Liked.ToList();
-                    
-                    // Ensure minimum holdout size for meaningful evaluation
-                    // If user has few likes, use a larger percentage or minimum of 3
-                    int holdoutSize;
-                    if (likedUsers.Count <= 2)
+                    usersConsidered++;
+                    var eligibleCandidates = BuildEligibleCandidates(user, allUsers);
+                    if (eligibleCandidates.Count == 0)
                     {
-                        holdoutSize = 1; // Minimum for evaluation
-                    }
-                    else if (likedUsers.Count <= 5)
-                    {
-                        holdoutSize = Math.Max(2, likedUsers.Count - 1); // Leave at least 1 for training
-                    }
-                    else if (likedUsers.Count <= 10)
-                    {
-                        holdoutSize = Math.Max(3, (int)(likedUsers.Count * 0.3)); // 30% for small sets
-                    }
-                    else
-                    {
-                        holdoutSize = Math.Max(5, (int)(likedUsers.Count * 0.2)); // 20% for larger sets, min 5
-                    }
-                    
-                    // Deterministic holdout selection based on user ID hash
-                    // This ensures the same user always gets the same holdout set across algorithm evaluations
-                    var userHash = user.Id.GetHashCode();
-                    var seededRandom = new Random(userHash);
-                    var shuffled = likedUsers.OrderBy(x => seededRandom.Next()).ToList();
-                    var holdoutLiked = shuffled.Take(holdoutSize).ToHashSet();
-                    var remainingLiked = shuffled.Skip(holdoutSize).ToHashSet();
-                    
-                    // Candidates: all users except self, disliked, and the holdout liked users
-                    // But we'll add back the holdout liked users for evaluation
-                    var userCandidates = candidates
-                        .Where(u => u.Id != user.Id && 
-                                   !user.Disliked.Contains(u.Id) &&
-                                   !remainingLiked.Contains(u.Id)) // Exclude non-holdout liked
-                        .ToList();
-                    
-                    // Add holdout liked users back for evaluation
-                    var holdoutCandidates = candidates
-                        .Where(u => holdoutLiked.Contains(u.Id))
-                        .ToList();
-                    userCandidates.AddRange(holdoutCandidates);
-
-                    if (userCandidates.Count == 0)
+                        usersSkipped++;
                         continue;
+                    }
 
-                    // Log for debugging
-                    _logger.LogDebug(
-                        "User {UserId}: {HoldoutCount} holdout users, {CandidateCount} total candidates",
-                        user.Id, holdoutLiked.Count, userCandidates.Count);
+                    var eligibleCandidateIds = eligibleCandidates.Select(u => u.Id).ToHashSet();
+                    var eligibleLiked = user.Liked
+                        .Where(id => eligibleCandidateIds.Contains(id) && !user.Disliked.Contains(id))
+                        .Distinct()
+                        .ToList();
+
+                    if (eligibleLiked.Count < minLikes)
+                    {
+                        usersSkipped++;
+                        continue;
+                    }
+
+                    var holdoutLiked = SelectHoldout(eligibleLiked, DefaultHoldoutFraction, minHoldoutSize, user.Id);
+                    var remainingLiked = eligibleLiked.Where(id => !holdoutLiked.Contains(id)).ToList();
+                    var eligibleLikedSet = eligibleLiked.ToHashSet();
+
+                    var userCandidates = eligibleCandidates
+                        .Where(u => !eligibleLikedSet.Contains(u.Id))
+                        .ToList();
+                    userCandidates.AddRange(eligibleCandidates.Where(u => holdoutLiked.Contains(u.Id)));
+                    userCandidates = userCandidates.DistinctBy(u => u.Id).ToList();
+
+                    if (userCandidates.Count == 0 || holdoutLiked.Count == 0)
+                    {
+                        usersSkipped++;
+                        continue;
+                    }
+
+                    totalEligibleLiked += eligibleLiked.Count;
+                    totalHoldout += holdoutLiked.Count;
+                    totalCandidates += userCandidates.Count;
 
                     MLRecommendationResponse? mlResponse = null;
                     if (currentAlgorithm.Equals("ContentBased", StringComparison.OrdinalIgnoreCase))
                     {
                         mlResponse = await _cbServiceClient.GetRecommendationsAsync(
-                            user, userCandidates, kVals.Max());
+                            user,
+                            userCandidates,
+                            kVals.Max(),
+                            mode: "feedback",
+                            targetLikedIds: remainingLiked,
+                            targetDislikedIds: user.Disliked);
                     }
                     else
                     {
@@ -425,64 +507,22 @@ public class UsersController : ControllerBase
                             user, userCandidates, kVals.Max());
                     }
 
-                    if (mlResponse != null)
+                    if (mlResponse == null)
                     {
-                        var recommendedIds = mlResponse.Results.Select(r => r.UserId).Distinct().ToList();
-                        
-                        // Validate: ensure no duplicates in recommendations
-                        if (recommendedIds.Count != mlResponse.Results.Count)
-                        {
-                            _logger.LogWarning(
-                                "User {UserId}: Found duplicate user IDs in recommendations. Original: {Original}, Unique: {Unique}",
-                                user.Id, mlResponse.Results.Count, recommendedIds.Count);
-                        }
-                        
-                        // Check if any holdout users were recommended
-                        var holdoutInRecommendations = recommendedIds.Intersect(holdoutLiked).ToList();
-                        if (holdoutInRecommendations.Any())
-                        {
-                            _logger.LogDebug(
-                                "User {UserId}: Algorithm recommended {Count}/{Total} holdout users: {UserIds}",
-                                user.Id, holdoutInRecommendations.Count, holdoutLiked.Count, string.Join(", ", holdoutInRecommendations));
-                        }
-                        else
-                        {
-                            _logger.LogDebug(
-                                "User {UserId}: Algorithm did not recommend any holdout users. " +
-                                "Holdout users: {HoldoutIds}, Top recommendations: {TopRecs}",
-                                user.Id, 
-                                string.Join(", ", holdoutLiked.Take(3)),
-                                string.Join(", ", recommendedIds.Take(5)));
-                        }
-                        
-                        // Calculate mutual accepts and chat starts ONLY from holdout users
-                        // This ensures metrics are calculated correctly with holdout ground truth
-                        var holdoutMutualAccepts = new HashSet<string>();
-                        var holdoutChatStarts = new HashSet<string>();
-                        
-                        foreach (var holdoutId in holdoutLiked)
-                        {
-                            var holdoutUser = await _context.Users.FindAsync(holdoutId);
-                            if (holdoutUser != null && holdoutUser.Liked.Contains(user.Id))
-                            {
-                                holdoutMutualAccepts.Add(holdoutId);
-                                holdoutChatStarts.Add(holdoutId); // Using mutual accepts as proxy
-                            }
-                        }
-                        
-                        // Validate ground truth size
-                        if (holdoutLiked.Count == 0)
-                        {
-                            _logger.LogWarning("User {UserId}: Holdout set is empty, skipping metrics", user.Id);
-                            continue;
-                        }
-                        
-                        // Use holdout liked users as ground truth for evaluation
-                        var metrics = _metricsService.CalculateMetricsWithGroundTruth(
-                            user.Id, recommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
-                        metrics.Algorithm = currentAlgorithm;
-                        allMetrics.Add(metrics);
+                        usersSkipped++;
+                        continue;
                     }
+
+                    var recommendedIds = mlResponse.Results.Select(r => r.UserId).ToList();
+                    var holdoutMutualAccepts = BuildHoldoutMutualAccepts(user.Id, holdoutLiked, likesByUserId);
+                    var holdoutChatStarts = holdoutLiked
+                        .Where(id => chatPartners.TryGetValue(user.Id, out var partners) && partners.Contains(id))
+                        .ToHashSet();
+
+                    var metrics = _metricsService.CalculateMetricsWithGroundTruth(
+                        user.Id, recommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
+                    metrics.Algorithm = currentAlgorithm;
+                    allMetrics.Add(metrics);
                 }
                 catch (Exception ex)
                 {
@@ -495,12 +535,36 @@ public class UsersController : ControllerBase
                 return BadRequest(new { error = "Could not calculate metrics for any users" });
             }
 
-            // Aggregate metrics
+            var avgHoldout = allMetrics.Count > 0 ? (double)totalHoldout / allMetrics.Count : 0.0;
+            var avgCandidates = allMetrics.Count > 0 ? (double)totalCandidates / allMetrics.Count : 0.0;
+            var avgEligibleLiked = allMetrics.Count > 0 ? (double)totalEligibleLiked / allMetrics.Count : 0.0;
+
             var aggregate = new AggregateMetricsResponse
             {
                 Algorithm = currentAlgorithm,
                 Timestamp = DateTime.UtcNow,
-                UserCount = allMetrics.Count
+                UserCount = allMetrics.Count,
+                Evaluation = new MetricsEvaluationMetadata
+                {
+                    HoldoutStrategy = "fraction",
+                    HoldoutFraction = DefaultHoldoutFraction,
+                    CandidateConstruction = CandidateConstructionDescription,
+                    Aggregation = "macro",
+                    PrecisionDenominator = "min(k, rec_count)",
+                    ChatStartDefinition = "any_message_between_pair",
+                    SampleSize = allMetrics.Count,
+                    MaxUsersEvaluated = maxUsers,
+                    UserSelection = sampleSeed.HasValue
+                        ? $"deterministic_hash(seed={sampleSeed.Value})"
+                        : "deterministic_hash(seed=0)",
+                    MinLikesForEval = minLikes,
+                    MinHoldoutSize = minHoldoutSize,
+                    AverageHoldoutSize = avgHoldout,
+                    AverageCandidateCount = avgCandidates,
+                    AverageEligibleLikedCount = avgEligibleLiked,
+                    UsersConsidered = usersConsidered,
+                    UsersSkipped = usersSkipped
+                }
             };
 
             foreach (var k in kVals)
@@ -528,112 +592,109 @@ public class UsersController : ControllerBase
     /// </summary>
     [HttpGet("metrics/compare")]
     public async Task<ActionResult<Dictionary<string, AggregateMetricsResponse>>> CompareAlgorithms(
-        [FromQuery] List<int>? kValues = null)
+        [FromQuery] List<int>? kValues = null,
+        [FromQuery] int maxUsers = DefaultMaxUsers,
+        [FromQuery] int? sampleSeed = null,
+        [FromQuery] int minLikes = DefaultMinLikesForEval,
+        [FromQuery] int minHoldoutSize = DefaultMinHoldoutSize)
     {
         try
         {
-            var kVals = kValues ?? new List<int> { 5, 10, 20 };
+            var kVals = NormalizeKValues(kValues);
+            maxUsers = Math.Clamp(maxUsers, 1, 500);
 
-            var users = await _context.Users
-                .Where(u => u.Liked.Count > 0) // Only users with interactions
-                .ToListAsync();
+            var allUsers = await _context.Users.ToListAsync();
+            var eligibleUsers = allUsers
+                .Where(u => u.Liked.Count > 0 && HasCompleteProfile(u))
+                .ToList();
 
-            if (users.Count == 0)
+            if (eligibleUsers.Count == 0)
             {
-                return BadRequest(new { error = "No users with interactions found" });
+                return BadRequest(new { error = "No users with interactions and complete profiles found" });
             }
 
-            var candidates = await _context.Users.ToListAsync();
+            var sampledUsers = SampleUsers(eligibleUsers, maxUsers, sampleSeed);
+            var likesByUserId = BuildLikesByUserId(allUsers);
+            var chatPartners = await GetChatPartnersAsync(sampledUsers.Select(u => u.Id));
             var mlMetrics = new List<RecommendationMetrics>();
             var cbMetrics = new List<RecommendationMetrics>();
+            var totalEligibleLiked = 0;
+            var totalHoldout = 0;
+            var totalCandidates = 0;
+            var usersConsidered = 0;
+            var usersSkipped = 0;
 
-            foreach (var user in users.Take(100)) // Limit to 100 users for performance
+            foreach (var user in sampledUsers)
             {
                 try
                 {
-                    // Create deterministic holdout set (same for both algorithms)
-                    var likedUsers = user.Liked.ToList();
-                    
-                    int holdoutSize;
-                    if (likedUsers.Count <= 2)
+                    usersConsidered++;
+                    var eligibleCandidates = BuildEligibleCandidates(user, allUsers);
+                    if (eligibleCandidates.Count == 0)
                     {
-                        holdoutSize = 1;
+                        usersSkipped++;
+                        continue;
                     }
-                    else if (likedUsers.Count <= 5)
-                    {
-                        holdoutSize = Math.Max(2, likedUsers.Count - 1);
-                    }
-                    else if (likedUsers.Count <= 10)
-                    {
-                        holdoutSize = Math.Max(3, (int)(likedUsers.Count * 0.3));
-                    }
-                    else
-                    {
-                        holdoutSize = Math.Max(5, (int)(likedUsers.Count * 0.2));
-                    }
-                    
-                    // Deterministic selection based on user ID
-                    var userHash = user.Id.GetHashCode();
-                    var seededRandom = new Random(userHash);
-                    var shuffled = likedUsers.OrderBy(x => seededRandom.Next()).ToList();
-                    var holdoutLiked = shuffled.Take(holdoutSize).ToHashSet();
-                    var remainingLiked = shuffled.Skip(holdoutSize).ToHashSet();
-                    
-                    // Build candidate set (same for both algorithms)
-                    var userCandidates = candidates
-                        .Where(u => u.Id != user.Id && 
-                                   !user.Disliked.Contains(u.Id) &&
-                                   !remainingLiked.Contains(u.Id))
+
+                    var eligibleCandidateIds = eligibleCandidates.Select(u => u.Id).ToHashSet();
+                    var eligibleLiked = user.Liked
+                        .Where(id => eligibleCandidateIds.Contains(id) && !user.Disliked.Contains(id))
+                        .Distinct()
                         .ToList();
-                    
-                    var holdoutCandidates = candidates
-                        .Where(u => holdoutLiked.Contains(u.Id))
+
+                    if (eligibleLiked.Count < minLikes)
+                    {
+                        usersSkipped++;
+                        continue;
+                    }
+
+                    var holdoutLiked = SelectHoldout(eligibleLiked, DefaultHoldoutFraction, minHoldoutSize, user.Id);
+                    var remainingLiked = eligibleLiked.Where(id => !holdoutLiked.Contains(id)).ToList();
+                    var eligibleLikedSet = eligibleLiked.ToHashSet();
+
+                    var userCandidates = eligibleCandidates
+                        .Where(u => !eligibleLikedSet.Contains(u.Id))
                         .ToList();
-                    userCandidates.AddRange(holdoutCandidates);
+                    userCandidates.AddRange(eligibleCandidates.Where(u => holdoutLiked.Contains(u.Id)));
+                    userCandidates = userCandidates.DistinctBy(u => u.Id).ToList();
 
                     if (userCandidates.Count == 0 || holdoutLiked.Count == 0)
-                        continue;
-
-                    // Calculate mutual accepts and chat starts (same for both algorithms)
-                    var holdoutMutualAccepts = new HashSet<string>();
-                    var holdoutChatStarts = new HashSet<string>();
-                    
-                    foreach (var holdoutId in holdoutLiked)
                     {
-                        var holdoutUser = await _context.Users.FindAsync(holdoutId);
-                        if (holdoutUser != null && holdoutUser.Liked.Contains(user.Id))
-                        {
-                            holdoutMutualAccepts.Add(holdoutId);
-                            holdoutChatStarts.Add(holdoutId);
-                        }
+                        usersSkipped++;
+                        continue;
                     }
 
-                    // Evaluate TwoTower
+                    totalEligibleLiked += eligibleLiked.Count;
+                    totalHoldout += holdoutLiked.Count;
+                    totalCandidates += userCandidates.Count;
+
+                    var holdoutMutualAccepts = BuildHoldoutMutualAccepts(user.Id, holdoutLiked, likesByUserId);
+                    var holdoutChatStarts = holdoutLiked
+                        .Where(id => chatPartners.TryGetValue(user.Id, out var partners) && partners.Contains(id))
+                        .ToHashSet();
+
                     var mlResponse = await _mlServiceClient.GetRecommendationsAsync(
                         user, userCandidates, kVals.Max());
-                    
                     if (mlResponse != null)
                     {
-                        var mlRecommendedIds = mlResponse.Results.Select(r => r.UserId).Distinct().ToList();
+                        var mlRecommendedIds = mlResponse.Results.Select(r => r.UserId).ToList();
                         var mlMetricsForUser = _metricsService.CalculateMetricsWithGroundTruth(
                             user.Id, mlRecommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
                         mlMetricsForUser.Algorithm = "TwoTower";
                         mlMetrics.Add(mlMetricsForUser);
                     }
 
-                    // Evaluate ContentBased
                     var cbResponse = await _cbServiceClient.GetRecommendationsAsync(
-                        user, userCandidates, kVals.Max());
-                    
+                        user,
+                        userCandidates,
+                        kVals.Max(),
+                        mode: "feedback",
+                        targetLikedIds: remainingLiked,
+                        targetDislikedIds: user.Disliked);
+
                     if (cbResponse != null)
                     {
-                        var cbRecommendedIds = cbResponse.Results.Select(r => r.UserId).Distinct().ToList();
-                        
-                        // Log recommendation count for debugging
-                        _logger.LogDebug(
-                            "User {UserId} ContentBased: Requested {Requested} recommendations, got {Actual} recommendations, holdout size {HoldoutSize}",
-                            user.Id, kVals.Max(), cbRecommendedIds.Count, holdoutLiked.Count);
-                        
+                        var cbRecommendedIds = cbResponse.Results.Select(r => r.UserId).ToList();
                         var cbMetricsForUser = _metricsService.CalculateMetricsWithGroundTruth(
                             user.Id, cbRecommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
                         cbMetricsForUser.Algorithm = "ContentBased";
@@ -647,6 +708,9 @@ public class UsersController : ControllerBase
             }
 
             var result = new Dictionary<string, AggregateMetricsResponse>();
+            var avgHoldout = mlMetrics.Count > 0 ? (double)totalHoldout / mlMetrics.Count : 0.0;
+            var avgCandidates = mlMetrics.Count > 0 ? (double)totalCandidates / mlMetrics.Count : 0.0;
+            var avgEligibleLiked = mlMetrics.Count > 0 ? (double)totalEligibleLiked / mlMetrics.Count : 0.0;
 
             // Aggregate TwoTower metrics
             if (mlMetrics.Count > 0)
@@ -655,7 +719,28 @@ public class UsersController : ControllerBase
                 {
                     Algorithm = "TwoTower",
                     Timestamp = DateTime.UtcNow,
-                    UserCount = mlMetrics.Count
+                    UserCount = mlMetrics.Count,
+                    Evaluation = new MetricsEvaluationMetadata
+                    {
+                        HoldoutStrategy = "fraction",
+                        HoldoutFraction = DefaultHoldoutFraction,
+                        CandidateConstruction = CandidateConstructionDescription,
+                        Aggregation = "macro",
+                        PrecisionDenominator = "min(k, rec_count)",
+                        ChatStartDefinition = "any_message_between_pair",
+                        SampleSize = mlMetrics.Count,
+                        MaxUsersEvaluated = maxUsers,
+                        UserSelection = sampleSeed.HasValue
+                            ? $"deterministic_hash(seed={sampleSeed.Value})"
+                            : "deterministic_hash(seed=0)",
+                        MinLikesForEval = minLikes,
+                        MinHoldoutSize = minHoldoutSize,
+                        AverageHoldoutSize = avgHoldout,
+                        AverageCandidateCount = avgCandidates,
+                        AverageEligibleLikedCount = avgEligibleLiked,
+                        UsersConsidered = usersConsidered,
+                        UsersSkipped = usersSkipped
+                    }
                 };
 
                 foreach (var k in kVals)
@@ -678,7 +763,28 @@ public class UsersController : ControllerBase
                 {
                     Algorithm = "ContentBased",
                     Timestamp = DateTime.UtcNow,
-                    UserCount = cbMetrics.Count
+                    UserCount = cbMetrics.Count,
+                    Evaluation = new MetricsEvaluationMetadata
+                    {
+                        HoldoutStrategy = "fraction",
+                        HoldoutFraction = DefaultHoldoutFraction,
+                        CandidateConstruction = CandidateConstructionDescription,
+                        Aggregation = "macro",
+                        PrecisionDenominator = "min(k, rec_count)",
+                        ChatStartDefinition = "any_message_between_pair",
+                        SampleSize = cbMetrics.Count,
+                        MaxUsersEvaluated = maxUsers,
+                        UserSelection = sampleSeed.HasValue
+                            ? $"deterministic_hash(seed={sampleSeed.Value})"
+                            : "deterministic_hash(seed=0)",
+                        MinLikesForEval = minLikes,
+                        MinHoldoutSize = minHoldoutSize,
+                        AverageHoldoutSize = avgHoldout,
+                        AverageCandidateCount = avgCandidates,
+                        AverageEligibleLikedCount = avgEligibleLiked,
+                        UsersConsidered = usersConsidered,
+                        UsersSkipped = usersSkipped
+                    }
                 };
 
                 foreach (var k in kVals)
@@ -706,6 +812,139 @@ public class UsersController : ControllerBase
             _logger.LogError(ex, "Error comparing algorithms");
             return StatusCode(500, new { error = "Internal server error" });
         }
+    }
+
+    private static List<int> NormalizeKValues(List<int>? kValues)
+    {
+        var normalized = (kValues ?? new List<int> { 5, 10, 20 })
+            .Where(k => k > 0)
+            .Distinct()
+            .OrderBy(k => k)
+            .ToList();
+
+        return normalized.Count > 0 ? normalized : new List<int> { 5, 10, 20 };
+    }
+
+    private static bool HasCompleteProfile(User user)
+    {
+        return user.PreferenceAgeMin.HasValue &&
+               user.PreferenceAgeMax.HasValue &&
+               !string.IsNullOrEmpty(user.PreferenceGender) &&
+               !string.IsNullOrEmpty(user.Gender);
+    }
+
+    private static List<User> BuildEligibleCandidates(User currentUser, List<User> allUsers)
+    {
+        if (!HasCompleteProfile(currentUser))
+            return new List<User>();
+
+        return allUsers
+            .Where(candidate =>
+                candidate.Id != currentUser.Id &&
+                !currentUser.Disliked.Contains(candidate.Id) &&
+                HasCompleteProfile(candidate) &&
+                candidate.Age >= currentUser.PreferenceAgeMin &&
+                candidate.Age <= currentUser.PreferenceAgeMax &&
+                currentUser.Age >= candidate.PreferenceAgeMin &&
+                currentUser.Age <= candidate.PreferenceAgeMax &&
+                (currentUser.PreferenceGender == "Any" || currentUser.PreferenceGender == candidate.Gender) &&
+                (candidate.PreferenceGender == "Any" || candidate.PreferenceGender == currentUser.Gender) &&
+                !candidate.Disliked.Contains(currentUser.Id))
+            .ToList();
+    }
+
+    private static HashSet<string> SelectHoldout(
+        List<string> eligibleLiked,
+        double holdoutFraction,
+        int minHoldoutSize,
+        string seedKey)
+    {
+        if (eligibleLiked.Count == 0)
+            return new HashSet<string>();
+
+        var holdoutSize = (int)Math.Ceiling(eligibleLiked.Count * holdoutFraction);
+        holdoutSize = Math.Max(minHoldoutSize, holdoutSize);
+        if (eligibleLiked.Count > 1)
+        {
+            holdoutSize = Math.Min(holdoutSize, eligibleLiked.Count - 1);
+        }
+
+        var seed = GetDeterministicSeed($"holdout:{seedKey}");
+        var random = new Random(seed);
+        var shuffled = eligibleLiked.OrderBy(_ => random.Next()).ToList();
+        return shuffled.Take(holdoutSize).ToHashSet();
+    }
+
+    private static int GetDeterministicSeed(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return BitConverter.ToInt32(bytes, 0);
+    }
+
+    private static Dictionary<string, HashSet<string>> BuildLikesByUserId(IEnumerable<User> users)
+    {
+        var lookup = new Dictionary<string, HashSet<string>>();
+        foreach (var user in users)
+        {
+            lookup[user.Id] = user.Liked.ToHashSet();
+        }
+        return lookup;
+    }
+
+    private static HashSet<string> BuildHoldoutMutualAccepts(
+        string userId,
+        HashSet<string> holdoutLiked,
+        Dictionary<string, HashSet<string>> likesByUserId)
+    {
+        var mutualAccepts = new HashSet<string>();
+        foreach (var holdoutId in holdoutLiked)
+        {
+            if (likesByUserId.TryGetValue(holdoutId, out var likedSet) && likedSet.Contains(userId))
+            {
+                mutualAccepts.Add(holdoutId);
+            }
+        }
+        return mutualAccepts;
+    }
+
+    private async Task<Dictionary<string, HashSet<string>>> GetChatPartnersAsync(IEnumerable<string> userIds)
+    {
+        var ids = userIds.Distinct().ToList();
+        var lookup = ids.ToDictionary(id => id, _ => new HashSet<string>());
+
+        if (ids.Count == 0)
+            return lookup;
+
+        var messages = await _context.Messages
+            .Where(m => ids.Contains(m.SenderId) || ids.Contains(m.RecipientId))
+            .Select(m => new { m.SenderId, m.RecipientId })
+            .ToListAsync();
+
+        foreach (var message in messages)
+        {
+            if (lookup.TryGetValue(message.SenderId, out var senderSet))
+            {
+                senderSet.Add(message.RecipientId);
+            }
+            if (lookup.TryGetValue(message.RecipientId, out var recipientSet))
+            {
+                recipientSet.Add(message.SenderId);
+            }
+        }
+
+        return lookup;
+    }
+
+    private static List<User> SampleUsers(List<User> users, int maxUsers, int? sampleSeed)
+    {
+        if (users.Count <= maxUsers)
+            return users;
+
+        var seed = sampleSeed ?? 0;
+        return users
+            .OrderBy(u => GetDeterministicSeed($"sample:{seed}:{u.Id}"))
+            .Take(maxUsers)
+            .ToList();
     }
 
     [HttpPost("generate-interactions")]
@@ -1082,4 +1321,3 @@ public class UsersController : ControllerBase
         }
     }
 }
-

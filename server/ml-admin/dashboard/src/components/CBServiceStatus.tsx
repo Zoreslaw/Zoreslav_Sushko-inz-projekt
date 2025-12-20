@@ -34,7 +34,7 @@ export const CBServiceStatus: React.FC = () => {
         return prevError;
       });
     } finally {
-      setLoading((prevLoading) => prevLoading ? false : prevLoading);
+      setLoading(false);
     }
   }, []);
 

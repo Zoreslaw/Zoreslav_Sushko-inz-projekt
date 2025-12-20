@@ -16,7 +16,7 @@ import {
   Chip,
 } from '@mui/material';
 import { CompareArrows } from '@mui/icons-material';
-import { mlAdminApi } from '../api/mlAdminApi';
+import { mlAdminApi, MetricsEvaluationMetadata } from '../api/mlAdminApi';
 import { ComparisonCharts } from './ComparisonCharts';
 
 interface MetricsData {
@@ -29,6 +29,7 @@ interface MetricsData {
   avgHitRateAtK?: Record<number, number>;
   avgMutualAcceptRateAtK?: Record<number, number>;
   avgChatStartRateAtK?: Record<number, number>;
+  evaluation?: MetricsEvaluationMetadata;
 }
 
 export const MetricsComparison: React.FC = () => {
@@ -107,6 +108,17 @@ export const MetricsComparison: React.FC = () => {
     return ml > cb ? 'ml' : ml < cb ? 'cb' : 'tie';
   };
 
+  const formatFraction = (val: number | undefined) => {
+    if (val === undefined) return '-';
+    return `${(val * 100).toFixed(0)}%`;
+  };
+  const formatNumber = (val: number | undefined) => {
+    if (val === undefined) return '-';
+    return val.toFixed(1);
+  };
+
+  const evaluation = mlMetrics?.evaluation || cbMetrics?.evaluation;
+
   const metrics = [
     { name: 'Precision', ml: mlMetrics?.avgPrecisionAtK, cb: cbMetrics?.avgPrecisionAtK },
     { name: 'Recall', ml: mlMetrics?.avgRecallAtK, cb: cbMetrics?.avgRecallAtK },
@@ -125,6 +137,19 @@ export const MetricsComparison: React.FC = () => {
             Algorithm Comparison
           </Typography>
         </Box>
+
+        {evaluation && (
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+            Eval: {evaluation.holdoutStrategy || 'n/a'} ({formatFraction(evaluation.holdoutFraction)} holdout),{' '}
+            agg={evaluation.aggregation || 'n/a'}, denom={evaluation.precisionDenominator || 'n/a'}
+            {evaluation.averageHoldoutSize !== undefined && (
+              <> · avg_holdout={formatNumber(evaluation.averageHoldoutSize)}</>
+            )}
+            {evaluation.averageCandidateCount !== undefined && (
+              <> · avg_candidates={formatNumber(evaluation.averageCandidateCount)}</>
+            )}
+          </Typography>
+        )}
 
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">

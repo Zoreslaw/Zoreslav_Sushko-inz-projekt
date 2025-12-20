@@ -6,7 +6,7 @@ from typing import List, Set, Dict, Tuple, Optional
 
 def precision_at_k(recommended: List[str], relevant: Set[str], k: int) -> float:
     """
-    Precision@K = |relevant items in top K| / K
+    Precision@K = |relevant items in top K| / min(K, |recommended|)
     
     Args:
         recommended: List of recommended user IDs (top K)
@@ -18,9 +18,12 @@ def precision_at_k(recommended: List[str], relevant: Set[str], k: int) -> float:
     """
     if k == 0:
         return 0.0
-    top_k = recommended[:k]
+    effective_k = min(k, len(recommended))
+    if effective_k == 0:
+        return 0.0
+    top_k = recommended[:effective_k]
     relevant_in_topk = sum(1 for uid in top_k if uid in relevant)
-    return relevant_in_topk / k
+    return relevant_in_topk / effective_k
 
 def recall_at_k(recommended: List[str], relevant: Set[str], k: int) -> float:
     """
@@ -36,7 +39,7 @@ def recall_at_k(recommended: List[str], relevant: Set[str], k: int) -> float:
     """
     if len(relevant) == 0:
         return 0.0
-    top_k = recommended[:k]
+    top_k = recommended[:min(k, len(recommended))]
     relevant_in_topk = sum(1 for uid in top_k if uid in relevant)
     return relevant_in_topk / len(relevant)
 
@@ -75,13 +78,12 @@ def ndcg_at_k(recommended: List[str], relevant: Set[str], k: int) -> float:
             score += 1.0 / math.log2(i + 1)
         return score
     
-    top_k = recommended[:k]
     num_relevant = len(relevant)
     
     if num_relevant == 0:
         return 0.0
     
-    dcg = dcg_at_k(top_k, relevant, k)
+    dcg = dcg_at_k(recommended, relevant, k)
     idcg = idcg_at_k(num_relevant, k)
     
     if idcg == 0.0:
@@ -103,8 +105,18 @@ def hit_rate_at_k(recommended: List[str], relevant: Set[str], k: int) -> float:
     """
     if len(relevant) == 0:
         return 0.0
-    top_k = recommended[:k]
+    top_k = recommended[:min(k, len(recommended))]
     return 1.0 if any(uid in relevant for uid in top_k) else 0.0
+
+def _normalize_recommendations(recommended: List[str]) -> List[str]:
+    seen = set()
+    normalized = []
+    for uid in recommended:
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        normalized.append(uid)
+    return normalized
 
 def calculate_metrics(
     recommendations: List[str],
@@ -129,11 +141,13 @@ def calculate_metrics(
         "hit_rate": {}
     }
     
+    normalized = _normalize_recommendations(recommendations)
+
     for k in k_values:
-        results["precision"][k] = precision_at_k(recommendations, ground_truth, k)
-        results["recall"][k] = recall_at_k(recommendations, ground_truth, k)
-        results["ndcg"][k] = ndcg_at_k(recommendations, ground_truth, k)
-        results["hit_rate"][k] = hit_rate_at_k(recommendations, ground_truth, k)
+        results["precision"][k] = precision_at_k(normalized, ground_truth, k)
+        results["recall"][k] = recall_at_k(normalized, ground_truth, k)
+        results["ndcg"][k] = ndcg_at_k(normalized, ground_truth, k)
+        results["hit_rate"][k] = hit_rate_at_k(normalized, ground_truth, k)
     
     return results
 
@@ -160,16 +174,19 @@ def calculate_product_metrics(
         "chat_start_rate": {}
     }
     
+    normalized = _normalize_recommendations(recommendations)
+
     for k in k_values:
-        top_k = set(recommendations[:k])
+        effective_k = min(k, len(normalized))
+        top_k = set(normalized[:effective_k])
         
-        # Mutual accept rate = |mutual accepts in top K| / K
+        # Mutual accept rate = |mutual accepts in top K| / min(K, |recommended|)
         mutual_in_topk = len(top_k & mutual_accepts)
-        results["mutual_accept_rate"][k] = mutual_in_topk / k if k > 0 else 0.0
+        results["mutual_accept_rate"][k] = mutual_in_topk / effective_k if effective_k > 0 else 0.0
         
-        # Chat start rate = |chat starts in top K| / K
+        # Chat start rate = |chat starts in top K| / min(K, |recommended|)
         chat_in_topk = len(top_k & chat_starts)
-        results["chat_start_rate"][k] = chat_in_topk / k if k > 0 else 0.0
+        results["chat_start_rate"][k] = chat_in_topk / effective_k if effective_k > 0 else 0.0
     
     return results
 

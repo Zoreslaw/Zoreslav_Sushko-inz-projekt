@@ -47,9 +47,13 @@ public class MetricsService
     /// </summary>
     public HashSet<string> GetChatStarts(string userId)
     {
-        // For now, use mutual accepts as proxy for chat starts
-        // In production, this should query Firestore or a chat table
-        return GetMutualAccepts(userId);
+        // Use messages as ground-truth chat starts when available.
+        // If messages are stored elsewhere (e.g., Firestore), this should be integrated.
+        return _context.Messages
+            .Where(m => m.SenderId == userId || m.RecipientId == userId)
+            .Select(m => m.SenderId == userId ? m.RecipientId : m.SenderId)
+            .Distinct()
+            .ToHashSet();
     }
 
     /// <summary>
@@ -94,6 +98,8 @@ public class MetricsService
         if (chatStarts == null)
             chatStarts = GetChatStarts(userId);
 
+        var normalizedRecommendations = NormalizeRecommendations(recommendedUserIds);
+
         var metrics = new RecommendationMetrics
         {
             UserId = userId,
@@ -104,12 +110,13 @@ public class MetricsService
 
         foreach (var k in kValues)
         {
-            var topK = recommendedUserIds.Take(k).ToList();
+            var effectiveK = Math.Min(k, normalizedRecommendations.Count);
+            var topK = normalizedRecommendations.Take(effectiveK).ToList();
             var topKSet = new HashSet<string>(topK);
 
             // Precision@K
             var relevantInTopK = topK.Count(uid => groundTruth.Contains(uid));
-            metrics.PrecisionAtK[k] = k > 0 ? (double)relevantInTopK / k : 0.0;
+            metrics.PrecisionAtK[k] = effectiveK > 0 ? (double)relevantInTopK / effectiveK : 0.0;
 
             // Recall@K - ensure it never exceeds 100%
             // This can happen if there are duplicates or calculation errors
@@ -119,21 +126,35 @@ public class MetricsService
             metrics.RecallAtK[k] = Math.Min(1.0, recall); // Cap at 100%
 
             // NDCG@K
-            metrics.NDCGAtK[k] = CalculateNDCG(topK, groundTruth, k);
+            metrics.NDCGAtK[k] = CalculateNDCG(normalizedRecommendations, groundTruth, k);
 
             // Hit Rate@K
             metrics.HitRateAtK[k] = groundTruth.Count > 0 && topKSet.Overlaps(groundTruth) ? 1.0 : 0.0;
 
             // Mutual Accept Rate@K - only count mutual accepts that are in ground truth
             var mutualInTopK = topKSet.Intersect(mutualAccepts).Intersect(groundTruth).Count();
-            metrics.MutualAcceptRateAtK[k] = k > 0 ? (double)mutualInTopK / k : 0.0;
+            metrics.MutualAcceptRateAtK[k] = effectiveK > 0 ? (double)mutualInTopK / effectiveK : 0.0;
 
             // Chat Start Rate@K - only count chat starts that are in ground truth
             var chatInTopK = topKSet.Intersect(chatStarts).Intersect(groundTruth).Count();
-            metrics.ChatStartRateAtK[k] = k > 0 ? (double)chatInTopK / k : 0.0;
+            metrics.ChatStartRateAtK[k] = effectiveK > 0 ? (double)chatInTopK / effectiveK : 0.0;
         }
 
         return metrics;
+    }
+
+    private static List<string> NormalizeRecommendations(IEnumerable<string> recommendedUserIds)
+    {
+        var seen = new HashSet<string>();
+        var normalized = new List<string>();
+        foreach (var userId in recommendedUserIds)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                continue;
+            if (seen.Add(userId))
+                normalized.Add(userId);
+        }
+        return normalized;
     }
 
     private double CalculateNDCG(List<string> ranking, HashSet<string> relevant, int k)
@@ -176,4 +197,3 @@ public class RecommendationMetrics
     public Dictionary<int, double> MutualAcceptRateAtK { get; set; } = new();
     public Dictionary<int, double> ChatStartRateAtK { get; set; } = new();
 }
-

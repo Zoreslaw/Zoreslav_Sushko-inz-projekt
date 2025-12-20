@@ -23,7 +23,10 @@ public class CBServiceClient
     public async Task<MLRecommendationResponse?> GetRecommendationsAsync(
         User targetUser, 
         List<User> candidates, 
-        int topK = 10)
+        int topK = 10,
+        string? mode = null,
+        IReadOnlyCollection<string>? targetLikedIds = null,
+        IReadOnlyCollection<string>? targetDislikedIds = null)
     {
         try
         {
@@ -31,7 +34,10 @@ public class CBServiceClient
             {
                 TargetUser = MapToUserProfile(targetUser),
                 Candidates = candidates.Select(MapToUserProfile).ToList(),
-                TopK = topK
+                TopK = topK,
+                Mode = mode,
+                TargetLikedIds = targetLikedIds?.ToList(),
+                TargetDislikedIds = targetDislikedIds?.ToList()
             };
 
             var json = JsonSerializer.Serialize(request, JsonOptions);

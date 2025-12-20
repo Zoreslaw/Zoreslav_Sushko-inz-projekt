@@ -35,7 +35,7 @@ export const ModelInfoCard: React.FC = () => {
     } catch (err: any) {
       setError((prevError) => err.message !== prevError ? err.message : prevError);
     } finally {
-      setLoading((prevLoading) => prevLoading ? false : prevLoading);
+      setLoading(false);
     }
   }, [currentAlgorithm]);
 

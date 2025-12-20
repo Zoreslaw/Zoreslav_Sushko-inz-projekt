@@ -35,7 +35,7 @@ export const MLServiceStatus: React.FC = () => {
         return prevError;
       });
     } finally {
-      setLoading((prevLoading) => prevLoading ? false : prevLoading);
+      setLoading(false);
     }
   }, []);
 

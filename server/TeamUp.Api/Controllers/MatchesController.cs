@@ -20,6 +20,7 @@ public class MatchesController : ControllerBase
     private readonly MLServiceClient _mlServiceClient;
     private readonly CBServiceClient _cbServiceClient;
     private readonly AlgorithmService _algorithmService;
+    private readonly HybridRecommendationService _hybridRecommendationService;
     private readonly PushNotificationService _pushNotificationService;
 
     public MatchesController(
@@ -28,6 +29,7 @@ public class MatchesController : ControllerBase
         MLServiceClient mlServiceClient,
         CBServiceClient cbServiceClient,
         AlgorithmService algorithmService,
+        HybridRecommendationService hybridRecommendationService,
         PushNotificationService pushNotificationService)
     {
         _context = context;
@@ -35,6 +37,7 @@ public class MatchesController : ControllerBase
         _mlServiceClient = mlServiceClient;
         _cbServiceClient = cbServiceClient;
         _algorithmService = algorithmService;
+        _hybridRecommendationService = hybridRecommendationService;
         _pushNotificationService = pushNotificationService;
     }
 
@@ -54,46 +57,18 @@ public class MatchesController : ControllerBase
         if (currentUser == null)
             return NotFound(new { error = "User not found" });
 
-        // Check if profile is complete
-        if (currentUser.PreferenceAgeMin == null || 
-            currentUser.PreferenceAgeMax == null ||
-            string.IsNullOrEmpty(currentUser.PreferenceGender) ||
-            string.IsNullOrEmpty(currentUser.Gender))
-        {
-            return BadRequest(new { error = "Please complete your profile to start matching" });
-        }
-
         // Get candidates (exclude already liked/disliked)
         var excludeIds = currentUser.Liked.Concat(currentUser.Disliked).Append(userId).ToList();
         
         var candidates = await _context.Users
             .Where(u => !excludeIds.Contains(u.Id))
-            .Where(u => u.PreferenceAgeMin != null && u.PreferenceAgeMax != null)
-            .Where(u => !string.IsNullOrEmpty(u.PreferenceGender))
             .Where(u => !string.IsNullOrEmpty(u.Gender))
             .ToListAsync();
 
-        // Apply preference filters
-        var filteredCandidates = candidates.Where(candidate =>
-        {
-            // Age preference checks
-            if (candidate.Age < currentUser.PreferenceAgeMin || candidate.Age > currentUser.PreferenceAgeMax)
-                return false;
-            if (currentUser.Age < candidate.PreferenceAgeMin || currentUser.Age > candidate.PreferenceAgeMax)
-                return false;
-
-            // Gender preference checks
-            if (currentUser.PreferenceGender != "Any" && currentUser.PreferenceGender != candidate.Gender)
-                return false;
-            if (candidate.PreferenceGender != "Any" && candidate.PreferenceGender != currentUser.Gender)
-                return false;
-
-            // Check if candidate disliked current user
-            if (candidate.Disliked.Contains(userId))
-                return false;
-
-            return true;
-        }).ToList();
+        // Soft-filter: only exclude candidates who explicitly disliked current user
+        var filteredCandidates = candidates
+            .Where(candidate => !candidate.Disliked.Contains(userId))
+            .ToList();
 
         if (!filteredCandidates.Any())
         {
@@ -110,7 +85,21 @@ public class MatchesController : ControllerBase
 
             if (algorithm.Equals("ContentBased", StringComparison.OrdinalIgnoreCase))
             {
-                mlResponse = await _cbServiceClient.GetRecommendationsAsync(currentUser, filteredCandidates, limit);
+                mlResponse = await _cbServiceClient.GetRecommendationsAsync(
+                    currentUser,
+                    filteredCandidates,
+                    limit,
+                    mode: "feedback",
+                    filterMode: "strict",
+                    targetLikedIds: currentUser.Liked,
+                    targetDislikedIds: currentUser.Disliked);
+            }
+            else if (algorithm.Equals("Hybrid", StringComparison.OrdinalIgnoreCase))
+            {
+                mlResponse = await _hybridRecommendationService.GetRecommendationsAsync(
+                    currentUser,
+                    filteredCandidates,
+                    limit);
             }
             else
             {

@@ -31,54 +31,84 @@ interface MetricsData {
 }
 
 interface ComparisonChartsProps {
-  mlMetrics: MetricsData;
-  cbMetrics: MetricsData;
+  mlMetrics?: MetricsData | null;
+  cbMetrics?: MetricsData | null;
+  hybridMetrics?: MetricsData | null;
 }
 
-export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, cbMetrics }) => {
+export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, cbMetrics, hybridMetrics }) => {
   const [tabValue, setTabValue] = React.useState(0);
   const kValues = [5, 10, 20];
+  const hasMl = !!mlMetrics;
+  const hasCb = !!cbMetrics;
+  const hasHybrid = !!hybridMetrics;
 
   // Prepare data for recommendation metrics charts
-  const recommendationData = kValues.map(k => ({
-    k: `@${k}`,
-    'TwoTower Precision': (mlMetrics.avgPrecisionAtK?.[k] || 0) * 100,
-    'ContentBased Precision': (cbMetrics.avgPrecisionAtK?.[k] || 0) * 100,
-    'TwoTower Recall': (mlMetrics.avgRecallAtK?.[k] || 0) * 100,
-    'ContentBased Recall': (cbMetrics.avgRecallAtK?.[k] || 0) * 100,
-    'TwoTower NDCG': (mlMetrics.avgNDCGAtK?.[k] || 0) * 100,
-    'ContentBased NDCG': (cbMetrics.avgNDCGAtK?.[k] || 0) * 100,
-    'TwoTower Hit Rate': (mlMetrics.avgHitRateAtK?.[k] || 0) * 100,
-    'ContentBased Hit Rate': (cbMetrics.avgHitRateAtK?.[k] || 0) * 100,
-  }));
+  const recommendationData = kValues.map(k => {
+    const point: Record<string, number | string> = { k: `@${k}` };
+    if (hasMl) {
+      point['TwoTower Precision'] = (mlMetrics!.avgPrecisionAtK?.[k] || 0) * 100;
+      point['TwoTower Recall'] = (mlMetrics!.avgRecallAtK?.[k] || 0) * 100;
+      point['TwoTower NDCG'] = (mlMetrics!.avgNDCGAtK?.[k] || 0) * 100;
+      point['TwoTower Hit Rate'] = (mlMetrics!.avgHitRateAtK?.[k] || 0) * 100;
+    }
+    if (hasCb) {
+      point['ContentBased Precision'] = (cbMetrics!.avgPrecisionAtK?.[k] || 0) * 100;
+      point['ContentBased Recall'] = (cbMetrics!.avgRecallAtK?.[k] || 0) * 100;
+      point['ContentBased NDCG'] = (cbMetrics!.avgNDCGAtK?.[k] || 0) * 100;
+      point['ContentBased Hit Rate'] = (cbMetrics!.avgHitRateAtK?.[k] || 0) * 100;
+    }
+    if (hasHybrid) {
+      point['Hybrid Precision'] = (hybridMetrics!.avgPrecisionAtK?.[k] || 0) * 100;
+      point['Hybrid Recall'] = (hybridMetrics!.avgRecallAtK?.[k] || 0) * 100;
+      point['Hybrid NDCG'] = (hybridMetrics!.avgNDCGAtK?.[k] || 0) * 100;
+      point['Hybrid Hit Rate'] = (hybridMetrics!.avgHitRateAtK?.[k] || 0) * 100;
+    }
+    return point;
+  });
 
   // Prepare data for product metrics charts
-  const productData = kValues.map(k => ({
-    k: `@${k}`,
-    'TwoTower Mutual Accept': (mlMetrics.avgMutualAcceptRateAtK?.[k] || 0) * 100,
-    'ContentBased Mutual Accept': (cbMetrics.avgMutualAcceptRateAtK?.[k] || 0) * 100,
-    'TwoTower Chat Start': (mlMetrics.avgChatStartRateAtK?.[k] || 0) * 100,
-    'ContentBased Chat Start': (cbMetrics.avgChatStartRateAtK?.[k] || 0) * 100,
-  }));
+  const productData = kValues.map(k => {
+    const point: Record<string, number | string> = { k: `@${k}` };
+    if (hasMl) {
+      point['TwoTower Mutual Accept'] = (mlMetrics!.avgMutualAcceptRateAtK?.[k] || 0) * 100;
+      point['TwoTower Chat Start'] = (mlMetrics!.avgChatStartRateAtK?.[k] || 0) * 100;
+    }
+    if (hasCb) {
+      point['ContentBased Mutual Accept'] = (cbMetrics!.avgMutualAcceptRateAtK?.[k] || 0) * 100;
+      point['ContentBased Chat Start'] = (cbMetrics!.avgChatStartRateAtK?.[k] || 0) * 100;
+    }
+    if (hasHybrid) {
+      point['Hybrid Mutual Accept'] = (hybridMetrics!.avgMutualAcceptRateAtK?.[k] || 0) * 100;
+      point['Hybrid Chat Start'] = (hybridMetrics!.avgChatStartRateAtK?.[k] || 0) * 100;
+    }
+    return point;
+  });
 
   // Prepare grouped bar chart data
-  const precisionData = kValues.map(k => ({
-    k: `@${k}`,
-    TwoTower: (mlMetrics.avgPrecisionAtK?.[k] || 0) * 100,
-    ContentBased: (cbMetrics.avgPrecisionAtK?.[k] || 0) * 100,
-  }));
+  const precisionData = kValues.map(k => {
+    const point: Record<string, number | string> = { k: `@${k}` };
+    if (hasMl) point.TwoTower = (mlMetrics!.avgPrecisionAtK?.[k] || 0) * 100;
+    if (hasCb) point.ContentBased = (cbMetrics!.avgPrecisionAtK?.[k] || 0) * 100;
+    if (hasHybrid) point.Hybrid = (hybridMetrics!.avgPrecisionAtK?.[k] || 0) * 100;
+    return point;
+  });
 
-  const recallData = kValues.map(k => ({
-    k: `@${k}`,
-    TwoTower: (mlMetrics.avgRecallAtK?.[k] || 0) * 100,
-    ContentBased: (cbMetrics.avgRecallAtK?.[k] || 0) * 100,
-  }));
+  const recallData = kValues.map(k => {
+    const point: Record<string, number | string> = { k: `@${k}` };
+    if (hasMl) point.TwoTower = (mlMetrics!.avgRecallAtK?.[k] || 0) * 100;
+    if (hasCb) point.ContentBased = (cbMetrics!.avgRecallAtK?.[k] || 0) * 100;
+    if (hasHybrid) point.Hybrid = (hybridMetrics!.avgRecallAtK?.[k] || 0) * 100;
+    return point;
+  });
 
-  const ndcgData = kValues.map(k => ({
-    k: `@${k}`,
-    TwoTower: (mlMetrics.avgNDCGAtK?.[k] || 0) * 100,
-    ContentBased: (cbMetrics.avgNDCGAtK?.[k] || 0) * 100,
-  }));
+  const ndcgData = kValues.map(k => {
+    const point: Record<string, number | string> = { k: `@${k}` };
+    if (hasMl) point.TwoTower = (mlMetrics!.avgNDCGAtK?.[k] || 0) * 100;
+    if (hasCb) point.ContentBased = (cbMetrics!.avgNDCGAtK?.[k] || 0) * 100;
+    if (hasHybrid) point.Hybrid = (hybridMetrics!.avgNDCGAtK?.[k] || 0) * 100;
+    return point;
+  });
 
   return (
     <Card>
@@ -106,8 +136,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Line type="monotone" dataKey="TwoTower Precision" stroke="#8884d8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="ContentBased Precision" stroke="#82ca9d" strokeWidth={2} />
+                  {hasMl && <Line type="monotone" dataKey="TwoTower Precision" stroke="#8884d8" strokeWidth={2} />}
+                  {hasCb && <Line type="monotone" dataKey="ContentBased Precision" stroke="#82ca9d" strokeWidth={2} />}
+                  {hasHybrid && <Line type="monotone" dataKey="Hybrid Precision" stroke="#00a870" strokeWidth={2} />}
                 </LineChart>
               </ResponsiveContainer>
             </Grid>
@@ -123,8 +154,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} domain={[0, 100]} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Line type="monotone" dataKey="TwoTower Recall" stroke="#8884d8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="ContentBased Recall" stroke="#82ca9d" strokeWidth={2} />
+                  {hasMl && <Line type="monotone" dataKey="TwoTower Recall" stroke="#8884d8" strokeWidth={2} />}
+                  {hasCb && <Line type="monotone" dataKey="ContentBased Recall" stroke="#82ca9d" strokeWidth={2} />}
+                  {hasHybrid && <Line type="monotone" dataKey="Hybrid Recall" stroke="#00a870" strokeWidth={2} />}
                 </LineChart>
               </ResponsiveContainer>
             </Grid>
@@ -140,8 +172,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Line type="monotone" dataKey="TwoTower NDCG" stroke="#8884d8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="ContentBased NDCG" stroke="#82ca9d" strokeWidth={2} />
+                  {hasMl && <Line type="monotone" dataKey="TwoTower NDCG" stroke="#8884d8" strokeWidth={2} />}
+                  {hasCb && <Line type="monotone" dataKey="ContentBased NDCG" stroke="#82ca9d" strokeWidth={2} />}
+                  {hasHybrid && <Line type="monotone" dataKey="Hybrid NDCG" stroke="#00a870" strokeWidth={2} />}
                 </LineChart>
               </ResponsiveContainer>
             </Grid>
@@ -157,8 +190,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Line type="monotone" dataKey="TwoTower Hit Rate" stroke="#8884d8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="ContentBased Hit Rate" stroke="#82ca9d" strokeWidth={2} />
+                  {hasMl && <Line type="monotone" dataKey="TwoTower Hit Rate" stroke="#8884d8" strokeWidth={2} />}
+                  {hasCb && <Line type="monotone" dataKey="ContentBased Hit Rate" stroke="#82ca9d" strokeWidth={2} />}
+                  {hasHybrid && <Line type="monotone" dataKey="Hybrid Hit Rate" stroke="#00a870" strokeWidth={2} />}
                 </LineChart>
               </ResponsiveContainer>
             </Grid>
@@ -178,8 +212,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Bar dataKey="TwoTower Mutual Accept" fill="#8884d8" />
-                  <Bar dataKey="ContentBased Mutual Accept" fill="#82ca9d" />
+                  {hasMl && <Bar dataKey="TwoTower Mutual Accept" fill="#8884d8" />}
+                  {hasCb && <Bar dataKey="ContentBased Mutual Accept" fill="#82ca9d" />}
+                  {hasHybrid && <Bar dataKey="Hybrid Mutual Accept" fill="#00a870" />}
                 </BarChart>
               </ResponsiveContainer>
             </Grid>
@@ -195,8 +230,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Bar dataKey="TwoTower Chat Start" fill="#8884d8" />
-                  <Bar dataKey="ContentBased Chat Start" fill="#82ca9d" />
+                  {hasMl && <Bar dataKey="TwoTower Chat Start" fill="#8884d8" />}
+                  {hasCb && <Bar dataKey="ContentBased Chat Start" fill="#82ca9d" />}
+                  {hasHybrid && <Bar dataKey="Hybrid Chat Start" fill="#00a870" />}
                 </BarChart>
               </ResponsiveContainer>
             </Grid>
@@ -216,8 +252,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: '%', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Bar dataKey="TwoTower" fill="#8884d8" />
-                  <Bar dataKey="ContentBased" fill="#82ca9d" />
+                  {hasMl && <Bar dataKey="TwoTower" fill="#8884d8" />}
+                  {hasCb && <Bar dataKey="ContentBased" fill="#82ca9d" />}
+                  {hasHybrid && <Bar dataKey="Hybrid" fill="#00a870" />}
                 </BarChart>
               </ResponsiveContainer>
             </Grid>
@@ -233,8 +270,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: '%', angle: -90, position: 'insideLeft' }} domain={[0, 100]} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Bar dataKey="TwoTower" fill="#8884d8" />
-                  <Bar dataKey="ContentBased" fill="#82ca9d" />
+                  {hasMl && <Bar dataKey="TwoTower" fill="#8884d8" />}
+                  {hasCb && <Bar dataKey="ContentBased" fill="#82ca9d" />}
+                  {hasHybrid && <Bar dataKey="Hybrid" fill="#00a870" />}
                 </BarChart>
               </ResponsiveContainer>
             </Grid>
@@ -250,8 +288,9 @@ export const ComparisonCharts: React.FC<ComparisonChartsProps> = ({ mlMetrics, c
                   <YAxis label={{ value: '%', angle: -90, position: 'insideLeft' }} />
                   <Tooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}%` : value} />
                   <Legend />
-                  <Bar dataKey="TwoTower" fill="#8884d8" />
-                  <Bar dataKey="ContentBased" fill="#82ca9d" />
+                  {hasMl && <Bar dataKey="TwoTower" fill="#8884d8" />}
+                  {hasCb && <Bar dataKey="ContentBased" fill="#82ca9d" />}
+                  {hasHybrid && <Bar dataKey="Hybrid" fill="#00a870" />}
                 </BarChart>
               </ResponsiveContainer>
             </Grid>

@@ -2,7 +2,7 @@
 // Minimal, typed client for the ML Admin API + SSE logs.
 // Works with the refactored api.py endpoints.
 
-export type AlgorytmType = 'TwoTower' | 'ContentBased';
+export type AlgorytmType = 'TwoTower' | 'ContentBased' | 'Hybrid';
 
 export type LastTrainingLog = {
   timestamp?: string;
@@ -250,7 +250,7 @@ export const mlAdminApi = {
     return fetchJSON(`/api/metrics/aggregate${query ? `?${query}` : ''}`, 'GET');
   },
 
-  async compareAlgorithms(kValues: number[] = [5, 10, 20]): Promise<{ TwoTower?: AggregateMetricsResponse; ContentBased?: AggregateMetricsResponse }> {
+  async compareAlgorithms(kValues: number[] = [5, 10, 20]): Promise<{ TwoTower?: AggregateMetricsResponse; ContentBased?: AggregateMetricsResponse; Hybrid?: AggregateMetricsResponse }> {
     const params = new URLSearchParams();
     kValues.forEach(k => params.append('kValues', k.toString()));
     const query = params.toString();

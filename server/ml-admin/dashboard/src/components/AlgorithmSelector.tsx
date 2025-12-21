@@ -15,7 +15,7 @@ import {
   Skeleton,
   Stack,
 } from '@mui/material';
-import { Psychology, AutoAwesome, Save } from '@mui/icons-material';
+import { Psychology, AutoAwesome, Save, MergeType } from '@mui/icons-material';
 import { mlAdminApi, MLHealth } from '../api/mlAdminApi';
 import { useAlgorithm } from '../contexts/AlgorithmContext';
 
@@ -139,6 +139,17 @@ export const AlgorithmSelector: React.FC = () => {
             onChange={handleAlgorithmChange}
             disabled={saving}
           >
+            <MenuItem value="Hybrid">
+              <Box display="flex" alignItems="center">
+                <MergeType sx={{ mr: 1, fontSize: 'small' }} />
+                <span>Hybrid (Two-Tower + Content-Based)</span>
+                {mlHealthy && cbHealthy ? (
+                  <Chip label="Online" color="success" size="small" sx={{ ml: 1 }} />
+                ) : (
+                  <Chip label="Partial" color="warning" size="small" sx={{ ml: 1 }} />
+                )}
+              </Box>
+            </MenuItem>
             <MenuItem value="TwoTower">
               <Box display="flex" alignItems="center">
                 <AutoAwesome sx={{ mr: 1, fontSize: 'small' }} />
@@ -188,11 +199,19 @@ export const AlgorithmSelector: React.FC = () => {
           </Alert>
         )}
 
+        {selectedAlgorithm === 'Hybrid' && (!mlHealthy || !cbHealthy) && (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            Hybrid mode works best when both services are online. Scores will fall back to available signals.
+          </Alert>
+        )}
+
         <Box mt={2}>
           <Typography variant="body2" color="text.secondary">
             <strong>Two-Tower:</strong> Deep learning model trained on user interactions
             <br />
             <strong>Content-Based:</strong> Feature-based similarity using games, categories, and languages
+            <br />
+            <strong>Hybrid:</strong> Weighted blend of Two-Tower, Content-Based, preferences, and interactions
           </Typography>
         </Box>
 

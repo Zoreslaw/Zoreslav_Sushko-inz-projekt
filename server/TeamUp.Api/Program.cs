@@ -122,6 +122,9 @@ builder.Services.AddScoped<CsvImportService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ProfileStatsService>();
+builder.Services.AddScoped<HybridRecommendationService>();
+builder.Services.Configure<HybridRecommendationOptions>(
+    builder.Configuration.GetSection("HybridRecommendation"));
 
 // CORS
 builder.Services.AddCors(options =>

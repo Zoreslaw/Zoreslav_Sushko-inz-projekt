@@ -39,7 +39,7 @@ const ProfileMenuItem: React.FC<ProfileMenuItemProps> = ({
 
 const styles = StyleSheet.create({
   itemContainer: {
-    height: 55,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,

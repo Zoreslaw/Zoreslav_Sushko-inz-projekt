@@ -19,6 +19,7 @@ public class UsersController : ControllerBase
     private readonly MLServiceClient _mlServiceClient;
     private readonly CBServiceClient _cbServiceClient;
     private readonly AlgorithmService _algorithmService;
+    private readonly HybridRecommendationService _hybridRecommendationService;
     private readonly MetricsService _metricsService;
     private readonly CsvImportService _csvImportService;
     private const double DefaultHoldoutFraction = 0.2;
@@ -26,7 +27,7 @@ public class UsersController : ControllerBase
     private const int DefaultMinLikesForEval = 5;
     private const int DefaultMinHoldoutSize = 2;
     private const string CandidateConstructionDescription =
-        "eligible_by_preferences_excluding_self_disliked_and_non_holdout_likes";
+        "eligible_by_excluding_self_disliked_candidate_disliked_and_non_holdout_likes_with_soft_preferences";
 
     public UsersController(
         ApplicationDbContext context, 
@@ -34,6 +35,7 @@ public class UsersController : ControllerBase
         MLServiceClient mlServiceClient,
         CBServiceClient cbServiceClient,
         AlgorithmService algorithmService,
+        HybridRecommendationService hybridRecommendationService,
         MetricsService metricsService,
         CsvImportService csvImportService)
     {
@@ -42,6 +44,7 @@ public class UsersController : ControllerBase
         _mlServiceClient = mlServiceClient;
         _cbServiceClient = cbServiceClient;
         _algorithmService = algorithmService;
+        _hybridRecommendationService = hybridRecommendationService;
         _metricsService = metricsService;
         _csvImportService = csvImportService;
     }
@@ -571,7 +574,7 @@ public class UsersController : ControllerBase
         var success = _algorithmService.SetAlgorithm(request.Algorithm);
         if (!success)
         {
-            return BadRequest(new { error = "Invalid algorithm. Must be 'TwoTower' or 'ContentBased'" });
+            return BadRequest(new { error = "Invalid algorithm. Must be 'TwoTower', 'ContentBased', or 'Hybrid'" });
         }
 
         var currentAlgorithm = _algorithmService.GetCurrentAlgorithm();
@@ -603,6 +606,10 @@ public class UsersController : ControllerBase
                            !targetUser.Disliked.Contains(u.Id))
                 .ToListAsync();
 
+            candidates = candidates
+                .Where(u => !u.Disliked.Contains(userId))
+                .ToList();
+
             if (candidates.Count == 0)
             {
                 return Ok(new List<RecommendationWithUser>());
@@ -622,8 +629,20 @@ public class UsersController : ControllerBase
             {
                 serviceName = "CB Service";
                 mlResponse = await _cbServiceClient.GetRecommendationsAsync(
-                    targetUser, 
-                    candidates, 
+                    targetUser,
+                    candidates,
+                    topK,
+                    mode: "feedback",
+                    filterMode: "strict",
+                    targetLikedIds: targetUser.Liked,
+                    targetDislikedIds: targetUser.Disliked);
+            }
+            else if (algorithm.Equals("Hybrid", StringComparison.OrdinalIgnoreCase))
+            {
+                serviceName = "Hybrid Service";
+                mlResponse = await _hybridRecommendationService.GetRecommendationsAsync(
+                    targetUser,
+                    candidates,
                     topK);
             }
             else
@@ -631,9 +650,9 @@ public class UsersController : ControllerBase
                 // Default to TwoTower (ML Service)
                 serviceName = "ML Service";
                 mlResponse = await _mlServiceClient.GetRecommendationsAsync(
-                targetUser, 
-                candidates, 
-                topK);
+                    targetUser,
+                    candidates,
+                    topK);
             }
 
             if (mlResponse == null)
@@ -750,8 +769,16 @@ public class UsersController : ControllerBase
                     candidatesForEval,
                     kValues.Max(),
                     mode: "feedback",
+                    filterMode: "strict",
                     targetLikedIds: remainingLiked,
                     targetDislikedIds: targetUser.Disliked);
+            }
+            else if (algorithm.Equals("Hybrid", StringComparison.OrdinalIgnoreCase))
+            {
+                mlResponse = await _hybridRecommendationService.GetRecommendationsAsync(
+                    targetUser,
+                    candidatesForEval,
+                    kValues.Max());
             }
             else
             {
@@ -909,8 +936,16 @@ public class UsersController : ControllerBase
                             userCandidates,
                             kVals.Max(),
                             mode: "feedback",
+                            filterMode: "strict",
                             targetLikedIds: remainingLiked,
                             targetDislikedIds: user.Disliked);
+                    }
+                    else if (currentAlgorithm.Equals("Hybrid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mlResponse = await _hybridRecommendationService.GetRecommendationsAsync(
+                            user,
+                            userCandidates,
+                            kVals.Max());
                     }
                     else
                     {
@@ -1029,6 +1064,7 @@ public class UsersController : ControllerBase
             var chatPartners = await GetChatPartnersAsync(sampledUsers.Select(u => u.Id));
             var mlMetrics = new List<RecommendationMetrics>();
             var cbMetrics = new List<RecommendationMetrics>();
+            var hybridMetrics = new List<RecommendationMetrics>();
             var totalEligibleLiked = 0;
             var totalHoldout = 0;
             var totalCandidates = 0;
@@ -1100,6 +1136,7 @@ public class UsersController : ControllerBase
                         userCandidates,
                         kVals.Max(),
                         mode: "feedback",
+                        filterMode: "strict",
                         targetLikedIds: remainingLiked,
                         targetDislikedIds: user.Disliked);
 
@@ -1110,6 +1147,20 @@ public class UsersController : ControllerBase
                             user.Id, cbRecommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
                         cbMetricsForUser.Algorithm = "ContentBased";
                         cbMetrics.Add(cbMetricsForUser);
+                    }
+
+                    var hybridResponse = await _hybridRecommendationService.GetRecommendationsAsync(
+                        user,
+                        userCandidates,
+                        kVals.Max());
+
+                    if (hybridResponse != null)
+                    {
+                        var hybridRecommendedIds = hybridResponse.Results.Select(r => r.UserId).ToList();
+                        var hybridMetricsForUser = _metricsService.CalculateMetricsWithGroundTruth(
+                            user.Id, hybridRecommendedIds, holdoutLiked, kVals, holdoutMutualAccepts, holdoutChatStarts);
+                        hybridMetricsForUser.Algorithm = "Hybrid";
+                        hybridMetrics.Add(hybridMetricsForUser);
                     }
                 }
                 catch (Exception ex)
@@ -1211,6 +1262,50 @@ public class UsersController : ControllerBase
                 result["ContentBased"] = cbAggregate;
             }
 
+            // Aggregate Hybrid metrics
+            if (hybridMetrics.Count > 0)
+            {
+                var hybridAggregate = new AggregateMetricsResponse
+                {
+                    Algorithm = "Hybrid",
+                    Timestamp = DateTime.UtcNow,
+                    UserCount = hybridMetrics.Count,
+                    Evaluation = new MetricsEvaluationMetadata
+                    {
+                        HoldoutStrategy = "fraction",
+                        HoldoutFraction = DefaultHoldoutFraction,
+                        CandidateConstruction = CandidateConstructionDescription,
+                        Aggregation = "macro",
+                        PrecisionDenominator = "min(k, rec_count)",
+                        ChatStartDefinition = "any_message_between_pair",
+                        SampleSize = hybridMetrics.Count,
+                        MaxUsersEvaluated = maxUsers,
+                        UserSelection = sampleSeed.HasValue
+                            ? $"deterministic_hash(seed={sampleSeed.Value})"
+                            : "deterministic_hash(seed=0)",
+                        MinLikesForEval = minLikes,
+                        MinHoldoutSize = minHoldoutSize,
+                        AverageHoldoutSize = avgHoldout,
+                        AverageCandidateCount = avgCandidates,
+                        AverageEligibleLikedCount = avgEligibleLiked,
+                        UsersConsidered = usersConsidered,
+                        UsersSkipped = usersSkipped
+                    }
+                };
+
+                foreach (var k in kVals)
+                {
+                    hybridAggregate.AvgPrecisionAtK[k] = hybridMetrics.Average(m => m.PrecisionAtK.GetValueOrDefault(k, 0.0));
+                    hybridAggregate.AvgRecallAtK[k] = hybridMetrics.Average(m => m.RecallAtK.GetValueOrDefault(k, 0.0));
+                    hybridAggregate.AvgNDCGAtK[k] = hybridMetrics.Average(m => m.NDCGAtK.GetValueOrDefault(k, 0.0));
+                    hybridAggregate.AvgHitRateAtK[k] = hybridMetrics.Average(m => m.HitRateAtK.GetValueOrDefault(k, 0.0));
+                    hybridAggregate.AvgMutualAcceptRateAtK[k] = hybridMetrics.Average(m => m.MutualAcceptRateAtK.GetValueOrDefault(k, 0.0));
+                    hybridAggregate.AvgChatStartRateAtK[k] = hybridMetrics.Average(m => m.ChatStartRateAtK.GetValueOrDefault(k, 0.0));
+                }
+
+                result["Hybrid"] = hybridAggregate;
+            }
+
             if (result.Count == 0)
             {
                 return BadRequest(new { error = "Could not calculate metrics for any users" });
@@ -1238,28 +1333,15 @@ public class UsersController : ControllerBase
 
     private static bool HasCompleteProfile(User user)
     {
-        return user.PreferenceAgeMin.HasValue &&
-               user.PreferenceAgeMax.HasValue &&
-               !string.IsNullOrEmpty(user.PreferenceGender) &&
-               !string.IsNullOrEmpty(user.Gender);
+        return user.Age > 0 && !string.IsNullOrEmpty(user.Gender);
     }
 
     private static List<User> BuildEligibleCandidates(User currentUser, List<User> allUsers)
     {
-        if (!HasCompleteProfile(currentUser))
-            return new List<User>();
-
         return allUsers
             .Where(candidate =>
                 candidate.Id != currentUser.Id &&
                 !currentUser.Disliked.Contains(candidate.Id) &&
-                HasCompleteProfile(candidate) &&
-                candidate.Age >= currentUser.PreferenceAgeMin &&
-                candidate.Age <= currentUser.PreferenceAgeMax &&
-                currentUser.Age >= candidate.PreferenceAgeMin &&
-                currentUser.Age <= candidate.PreferenceAgeMax &&
-                (currentUser.PreferenceGender == "Any" || currentUser.PreferenceGender == candidate.Gender) &&
-                (candidate.PreferenceGender == "Any" || candidate.PreferenceGender == currentUser.Gender) &&
                 !candidate.Disliked.Contains(currentUser.Id))
             .ToList();
     }

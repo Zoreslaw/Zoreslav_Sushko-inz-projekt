@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Train TwoTower V6 model from a CSV dataset (Colab-friendly).
+Train Hybrid TwoTower model from a CSV dataset (Colab-friendly).
 Expected CSV headers (case-insensitive):
 id, age, gender, favorite_games, liked, disliked
 favorite_games/liked/disliked can be JSON arrays or comma-separated values.
@@ -27,8 +27,9 @@ if NETWORK_DIR.exists():
 elif Path("/app/network").exists():
     sys.path.insert(0, "/app/network")
 
-from models.domain import DataStore, InteractionSet, UserProfile, GAMES
-from training.trainer_v6 import train_model_v6_extreme
+from models.domain import DataStore, InteractionSet, UserProfile
+from training.trainer_hybrid import train_model_hybrid
+from data.hybrid_features import build_feature_config, normalize_list, normalize_gender, hash_user_id
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,29 +39,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-def _clean_game_key(value: str) -> str:
-    return "".join(ch for ch in value.lower() if ch.isalnum())
-
-
-GAME_ALIASES: Dict[str, str] = {_clean_game_key(g): g for g in GAMES}
-GAME_ALIASES.update(
-    {
-        "csgo": "cs2",
-        "counterstrike2": "cs2",
-        "counterstrikeglobaloffensive": "cs2",
-        "counterstrike": "cs2",
-        "dota": "dota2",
-        "leagueoflegends": "lol",
-        "apexlegends": "apex",
-        "overwatch": "overwatch2",
-        "heartsofiron4": "hoi4",
-        "bf1": "battlefield1",
-        "gtav": "gta5rp",
-        "gta5": "gta5rp",
-        "grandtheftauto5": "gta5rp",
-    }
-)
 
 
 def parse_json_list(value: Optional[str]) -> List[str]:
@@ -79,33 +57,8 @@ def parse_json_list(value: Optional[str]) -> List[str]:
     return [item.strip().strip('"') for item in raw.split(",") if item.strip()]
 
 
-def normalize_gender(value: Optional[str]) -> Tuple[str, bool]:
-    if not value:
-        return "M", True
-    raw = value.strip().lower()
-    if raw in ("m", "male"):
-        return "M", False
-    if raw in ("f", "female"):
-        return "F", False
-    return "M", True
-
-
-def normalize_games(games: List[str]) -> Tuple[List[str], int]:
-    normalized: List[str] = []
-    seen = set()
-    unknown = 0
-    for game in games:
-        key = _clean_game_key(game)
-        if not key:
-            continue
-        canonical = GAME_ALIASES.get(key)
-        if not canonical:
-            unknown += 1
-            continue
-        if canonical not in seen:
-            seen.add(canonical)
-            normalized.append(canonical)
-    return normalized, unknown
+def normalize_games(games: List[str]) -> List[str]:
+    return normalize_list(games)
 
 
 def _get_field(row: Dict[str, str], field_map: Dict[str, str], key: str) -> Optional[str]:
@@ -115,13 +68,12 @@ def _get_field(row: Dict[str, str], field_map: Dict[str, str], key: str) -> Opti
     return row.get(actual)
 
 
-def load_users_from_csv(csv_path: Path) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
+def load_users_from_csv(csv_path: Path, user_hash_buckets: int) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
     required_fields = ["id", "age", "gender", "favorite_games", "liked", "disliked"]
 
     users: List[Dict[str, object]] = []
     skipped = 0
     unknown_gender = 0
-    unknown_games = 0
 
     with csv_path.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -147,13 +99,12 @@ def load_users_from_csv(csv_path: Path) -> Tuple[List[Dict[str, object]], Dict[s
                 skipped += 1
                 continue
 
-            gender, gender_unknown = normalize_gender(_get_field(row, field_map, "gender"))
-            if gender_unknown:
+            gender = normalize_gender(_get_field(row, field_map, "gender"))
+            if gender == "other":
                 unknown_gender += 1
 
             raw_games = parse_json_list(_get_field(row, field_map, "favorite_games"))
-            games, unknown_count = normalize_games(raw_games)
-            unknown_games += unknown_count
+            games = normalize_games(raw_games)
 
             liked_ids = parse_json_list(_get_field(row, field_map, "liked"))
             disliked_ids = parse_json_list(_get_field(row, field_map, "disliked"))
@@ -161,9 +112,12 @@ def load_users_from_csv(csv_path: Path) -> Tuple[List[Dict[str, object]], Dict[s
             users.append(
                 {
                     "id": user_id,
+                    "user_hash": hash_user_id(user_id, user_hash_buckets),
                     "age": age,
                     "gender": gender,
                     "games": games,
+                    "categories": [],
+                    "languages": [],
                     "liked": liked_ids,
                     "disliked": disliked_ids,
                     "line": line_num,
@@ -173,9 +127,7 @@ def load_users_from_csv(csv_path: Path) -> Tuple[List[Dict[str, object]], Dict[s
     id_to_idx = {user["id"]: idx for idx, user in enumerate(users)}
     logger.info(f"Loaded {len(users)} users from CSV (skipped {skipped})")
     if unknown_gender > 0:
-        logger.info(f"Unknown gender values defaulted to 'M': {unknown_gender}")
-    if unknown_games > 0:
-        logger.info(f"Unknown game tokens ignored: {unknown_games}")
+        logger.info(f"Unknown gender values mapped to 'other': {unknown_gender}")
     return users, id_to_idx
 
 
@@ -184,10 +136,12 @@ def build_datastore(raw_users: List[Dict[str, object]], id_to_idx: Dict[str, int
     for idx, raw in enumerate(raw_users):
         dat.users.append(
             UserProfile(
-                user_id=idx,
+                user_id=int(raw["user_hash"]),
                 age=int(raw["age"]),
                 gender=str(raw["gender"]),
                 games=list(raw["games"]),
+                categories=list(raw.get("categories") or []),
+                languages=list(raw.get("languages") or []),
             )
         )
 
@@ -228,7 +182,7 @@ def train_from_csv(args: argparse.Namespace) -> bool:
         logger.error(f"CSV not found: {csv_path}")
         return False
 
-    raw_users, id_to_idx = load_users_from_csv(csv_path)
+    raw_users, id_to_idx = load_users_from_csv(csv_path, args.user_hash_buckets)
     if len(raw_users) < args.min_users:
         logger.warning(f"Not enough users ({len(raw_users)} < {args.min_users}).")
         return False
@@ -253,26 +207,27 @@ def train_from_csv(args: argparse.Namespace) -> bool:
         else:
             device = torch.device(args.device)
 
-    logger.info("Starting model training with V6 EXTREME...")
-    model = train_model_v6_extreme(
+    logger.info("Starting hybrid Two-Tower training...")
+    cfg = build_feature_config(
+        [(u["games"], u["categories"], u["languages"], int(u["age"])) for u in raw_users],
+        user_hash_buckets=args.user_hash_buckets,
+        min_age=18,
+        max_age=100,
+    )
+    model = train_model_hybrid(
         dat,
+        cfg,
         epochs=args.epochs,
         lr=args.lr,
         batch_size=args.batch_size,
         device=device,
         log_fn=lambda m: logger.info(m),
         dropout=0.3,
-        use_scheduler=True,
-        focal_gamma=2.0,
-        rejection_weight=0.5,
-        intersection_weight=0.3,
-        use_weighted_sampling=True,
-        emb_age_dim=32,
-        emb_user_dim=64,
-        game_emb_dim=64,
-        tower_hidden=(512, 256, 128),
-        out_dim=128,
-        temperature=0.07,
+        tower_hidden=(256, 128),
+        out_dim=64,
+        emb_user_dim=32,
+        emb_token_dim=32,
+        hard_negative_ratio=0.3,
     )
 
     start = datetime.now()
@@ -288,7 +243,13 @@ def train_from_csv(args: argparse.Namespace) -> bool:
     tmp_path = model_path.with_suffix(model_path.suffix + ".tmp")
 
     logger.info(f"Saving model to {model_path}")
-    torch.save(model.state_dict(), tmp_path)
+    bundle = {
+        "state_dict": model.state_dict(),
+        "feature_config": cfg.to_dict(),
+        "model_version": version,
+        "architecture": "TwoTowerHybrid",
+    }
+    torch.save(bundle, tmp_path)
     os.replace(tmp_path, model_path)
 
     logger.info(f"Model saved: {model_path}")
@@ -298,7 +259,7 @@ def train_from_csv(args: argparse.Namespace) -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Train TwoTower V6 from CSV dataset.")
+    parser = argparse.ArgumentParser(description="Train Hybrid TwoTower from CSV dataset.")
     parser.add_argument("--csv-path", required=True, help="Path to the CSV dataset")
     parser.add_argument("--output-dir", default="models", help="Output directory for model file")
     parser.add_argument("--epochs", type=int, default=80, help="Training epochs")
@@ -308,6 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-users", type=int, default=10, help="Minimum users required")
     parser.add_argument("--min-interactions", type=int, default=5, help="Minimum interactions required")
     parser.add_argument("--device", choices=["cpu", "cuda"], default=None, help="Force device")
+    parser.add_argument("--user-hash-buckets", type=int, default=100000, help="User ID hash bucket count")
     return parser
 
 

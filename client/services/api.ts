@@ -177,6 +177,8 @@ class ApiClient {
     requiresAuth = true
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    console.log(`[API] Request starting: ${endpoint}`);
+    console.log(`[API] Full URL: ${url}`);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -184,16 +186,29 @@ class ApiClient {
 
     if (requiresAuth && this.accessToken) {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
+      console.log(`[API] Auth header added for ${endpoint}`);
+    } else if (requiresAuth) {
+      console.log(`[API] WARNING: No access token for authenticated endpoint ${endpoint}`);
     }
 
     try {
+      console.log(`[API] Calling fetch for ${endpoint}...`);
       const response = await fetch(url, {
         ...options,
         headers,
       });
+      console.log(`[API] Fetch completed for ${endpoint}, status: ${response.status}`);
 
       // Handle 401 - try to refresh token
       if (response.status === 401 && requiresAuth && this.refreshToken) {
+        // Don't try to refresh if this is already a logout request (avoid infinite loop)
+        if (endpoint === '/api/auth/logout') {
+          // For logout, just clear tokens locally without making another request
+          await this.clearTokens();
+          this.onAuthChange?.(null);
+          return {} as T;
+        }
+        
         const refreshed = await this.refreshAccessToken();
         if (refreshed) {
           headers['Authorization'] = `Bearer ${this.accessToken}`;
@@ -203,21 +218,57 @@ class ApiClient {
           }
           return retryResponse.json();
         } else {
-          // Refresh failed, logout
-          await this.logout();
+          // Refresh failed, logout (but skip the API call if we're already in a logout)
+          if (endpoint !== '/api/auth/logout') {
+            await this.logout();
+          } else {
+            // Already in logout, just clear tokens
+            await this.clearTokens();
+            this.onAuthChange?.(null);
+          }
           throw new Error('Session expired. Please login again.');
         }
       }
 
+      // Read response text first (can only read once)
+      const responseText = await response.text();
+      
       if (!response.ok) {
-        throw new Error(await this.parseError(response));
+        console.error(`[API] Request failed for ${endpoint}:`, response.status);
+        console.error(`[API] Response body:`, responseText);
+        
+        let errorText = `Error ${response.status}`;
+        
+        // Try to parse error from response body
+        if (responseText) {
+          try {
+            const errorJson = JSON.parse(responseText);
+            if (errorJson.error) {
+              errorText = errorJson.error;
+            } else if (errorJson.message) {
+              errorText = errorJson.message;
+            } else if (typeof errorJson === 'string') {
+              errorText = errorJson;
+            }
+          } catch {
+            // If not JSON, use the text as error (if it's short enough)
+            if (responseText.length < 200) {
+              errorText = responseText;
+            }
+          }
+        }
+        
+        console.error(`[API] Final error message:`, errorText);
+        throw new Error(errorText);
       }
 
       // Handle empty responses
-      const text = await response.text();
-      return text ? JSON.parse(text) : ({} as T);
+      console.log(`[API] Response text received for ${endpoint}, length: ${responseText.length}`);
+      const result = responseText ? JSON.parse(responseText) : ({} as T);
+      console.log(`[API] Request completed successfully for ${endpoint}`);
+      return result;
     } catch (error) {
-      console.error(`API Error [${endpoint}]:`, error);
+      console.error(`[API] Error [${endpoint}]:`, error);
       throw error;
     }
   }
@@ -300,25 +351,46 @@ class ApiClient {
   }
 
   async logout(): Promise<void> {
+    console.log('[API] logout() called');
     try {
-      if (this.refreshToken) {
-        await this.request('/api/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refreshToken: this.refreshToken }),
-        });
+      // Clear tokens first to prevent infinite loops
+      const refreshToken = this.refreshToken;
+      await this.clearTokens();
+      
+      // Try to notify backend, but don't fail if it doesn't work
+      if (refreshToken) {
+        try {
+          const response = await fetch(`${this.baseUrl}/api/auth/logout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          });
+          // Don't care about the response - we've already cleared tokens
+          console.log('[API] Logout request sent, status:', response.status);
+        } catch (error) {
+          // Silently fail - we've already cleared tokens locally
+          console.log('[API] Logout request failed (ignored):', error);
+        }
       }
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[API] Logout error:', error);
     } finally {
+      // Ensure tokens are cleared and auth state is updated
       await this.clearTokens();
       this.onAuthChange?.(null);
+      console.log('[API] Logout complete');
     }
   }
 
   // ============ PROFILE ENDPOINTS ============
 
   async getProfile(): Promise<UserProfile> {
-    return this.request<UserProfile>('/api/profile');
+    console.log('[API] getProfile() called');
+    console.log('[API] Base URL:', this.baseUrl);
+    console.log('[API] Access token exists:', !!this.accessToken);
+    const result = await this.request<UserProfile>('/api/profile');
+    console.log('[API] getProfile() completed');
+    return result;
   }
 
   async getProfileStats(): Promise<ProfileStats> {
@@ -510,9 +582,16 @@ class ApiClient {
     messageType = 'Text',
     url?: string
   ): Promise<Message> {
+    console.log('[API] sendMessage called:', { conversationId, messageType, url: url ? 'exists' : 'null', messageLength: message.length });
+    // Use capital U for Url to match backend DTO
+    const payload: any = { message, messageType };
+    if (url) {
+      payload.Url = url; // Capital U to match C# DTO
+    }
+    console.log('[API] Sending message payload:', JSON.stringify(payload));
     return this.request<Message>(`/api/conversations/${conversationId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ message, messageType, url }),
+      body: JSON.stringify(payload),
     });
   }
 

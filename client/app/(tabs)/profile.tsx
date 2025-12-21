@@ -594,13 +594,16 @@ export default function Profile() {
           <ProfileAnimatedSubmenu isExpanded={isGamesPressed}>
             <ProfileSubmenuItem title='Favorite Games' contents={profile?.favoriteGames || []} onPress={handleFavoriteGames} />
             <ProfileSubmenuItem title='Other Games' contents={profile?.otherGames || []} onPress={handleOtherGames} />
+          </ProfileAnimatedSubmenu>
+          <ProfileMenuItem title="Settings" iconName="settings" isPressed={isSettingsPressed} onPress={handleSettings} />
+
+          <ProfileAnimatedSubmenu isExpanded={isSettingsPressed}>
             <ProfileSubmenuItem
               title='Steam Account'
               contents={[profile?.steamDisplayName || profile?.steamId || 'Not connected']}
               onPress={handleSteamAccount}
             />
           </ProfileAnimatedSubmenu>
-          <ProfileMenuItem title="Settings" iconName="settings" isPressed={isSettingsPressed} onPress={handleSettings} />
         </ScrollView>
         <View style={styles.buttonContainer}>
           <SignOutButton label="Sign Out" onPress={handleSignOut} style={styles.signOutButton} />
@@ -620,7 +623,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: 68,
+    paddingBottom: 120,
   },
   buttonContainer: {
     flex: 1,

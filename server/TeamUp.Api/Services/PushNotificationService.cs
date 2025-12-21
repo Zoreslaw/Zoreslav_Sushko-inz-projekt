@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using TeamUp.Api.Data;
+using TeamUp.Api.Models;
 
 namespace TeamUp.Api.Services;
 
@@ -23,12 +24,24 @@ public class PushNotificationService
 
     public async Task SendToUserAsync(string userId, string title, string body, Dictionary<string, string>? data = null)
     {
-        var tokens = await _context.DeviceTokens
-            .Where(t => t.UserId == userId && t.IsActive)
-            .ToListAsync();
-
-        if (tokens.Count == 0)
+        List<DeviceToken> tokens;
+        
+        try
         {
+            tokens = await _context.DeviceTokens
+                .Where(t => t.UserId == userId && t.IsActive)
+                .ToListAsync();
+
+            if (tokens.Count == 0)
+            {
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle case where device_tokens table doesn't exist yet
+            // This can happen if migrations haven't been run
+            _logger.LogWarning(ex, "Failed to query device tokens. Table may not exist. Push notification skipped.");
             return;
         }
 

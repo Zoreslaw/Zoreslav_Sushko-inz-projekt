@@ -16,8 +16,10 @@ def make_eligibility_filter(probe: User) -> Callable[[User], bool]:
             if u.age > probe.preference_age_max:
                 return False
         # gender
-        if probe.preference_gender and probe.preference_gender not in ("Any", "", None):
-            if u.gender and u.gender != probe.preference_gender:
-                return False
+        if probe.preference_gender:
+            pref = probe.preference_gender.strip().lower()
+            if pref not in ("any", ""):
+                if u.gender and u.gender.lower() != pref:
+                    return False
         return True
     return _ok

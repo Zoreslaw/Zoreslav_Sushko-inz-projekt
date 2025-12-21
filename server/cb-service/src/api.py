@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from src.data_models import User
 from src.io_backend import fetch_users_api, map_backend_to_user, BackendUserRow
+from src.features import Featurizer
 from src.recommender import ContentBasedRecommender
 
 # Configure logging
@@ -46,8 +47,9 @@ class UserProfile(BaseModel):
 class RecommendationRequest(BaseModel):
     targetUser: UserProfile
     candidates: List[UserProfile] = Field(default_factory=list)
-    topK: int = Field(default=20, ge=1, le=100)
+    topK: int = Field(default=20, ge=1, le=1000)
     mode: str = Field(default="feedback")
+    filterMode: str = Field(default="strict")
     targetLikedIds: Optional[List[str]] = None
     targetDislikedIds: Optional[List[str]] = None
 
@@ -72,7 +74,7 @@ def _merge_unique(*items: List[str]) -> List[str]:
         for val in arr:
             if val is None:
                 continue
-            item = str(val).strip()
+            item = str(val).strip().lower()
             if not item or item in seen:
                 continue
             seen.add(item)
@@ -87,56 +89,46 @@ def _user_profile_to_user(
 ) -> User:
     """Convert UserProfile to User domain model."""
     # Try to find full user data from cache if available
+    cached = None
     if all_users:
         cached = next((u for u in all_users if u.id == profile.id), None)
-        if cached:
-            merged_games = _merge_unique(
-                cached.favorite_games,
-                profile.games,
-                profile.otherGames,
-                profile.steamGames
-            )
-            merged_languages = _merge_unique(cached.languages, profile.languages)
-            merged_pref_categories = _merge_unique(
-                cached.preference_categories,
-                profile.preferenceCategories,
-                profile.steamCategories
-            )
-            merged_pref_languages = _merge_unique(
-                cached.preference_languages,
-                profile.preferenceLanguages
-            )
-            user = replace(
-                cached,
-                favorite_games=merged_games,
-                languages=merged_languages,
-                favorite_category=profile.favoriteCategory or cached.favorite_category,
-                preference_categories=merged_pref_categories,
-                preference_languages=merged_pref_languages,
-                preference_gender=profile.preferenceGender or cached.preference_gender,
-                preference_age_min=profile.preferenceAgeMin if profile.preferenceAgeMin is not None else cached.preference_age_min,
-                preference_age_max=profile.preferenceAgeMax if profile.preferenceAgeMax is not None else cached.preference_age_max,
-            )
-        else:
-            user = User(
-                id=profile.id,
-                age=profile.age,
-                gender=profile.gender,
-                favorite_category=profile.favoriteCategory,
-                preference_gender=profile.preferenceGender,
-                preference_age_min=profile.preferenceAgeMin,
-                preference_age_max=profile.preferenceAgeMax,
-                favorite_games=_merge_unique(profile.games, profile.otherGames, profile.steamGames),
-                languages=_merge_unique(profile.languages),
-                preference_categories=_merge_unique(profile.preferenceCategories, profile.steamCategories),
-                preference_languages=_merge_unique(profile.preferenceLanguages),
-            )
+    if cached:
+        merged_games = _merge_unique(
+            cached.favorite_games,
+            profile.games,
+            profile.otherGames,
+            profile.steamGames
+        )
+        merged_languages = _merge_unique(cached.languages, profile.languages)
+        merged_pref_categories = _merge_unique(
+            cached.preference_categories,
+            profile.preferenceCategories,
+            profile.steamCategories
+        )
+        merged_pref_languages = _merge_unique(
+            cached.preference_languages,
+            profile.preferenceLanguages
+        )
+        fav_cat = profile.favoriteCategory or cached.favorite_category
+        if fav_cat:
+            fav_cat = str(fav_cat).strip().lower()
+        user = replace(
+            cached,
+            favorite_games=merged_games,
+            languages=merged_languages,
+            favorite_category=fav_cat,
+            preference_categories=merged_pref_categories,
+            preference_languages=merged_pref_languages,
+            preference_gender=profile.preferenceGender or cached.preference_gender,
+            preference_age_min=profile.preferenceAgeMin if profile.preferenceAgeMin is not None else cached.preference_age_min,
+            preference_age_max=profile.preferenceAgeMax if profile.preferenceAgeMax is not None else cached.preference_age_max,
+        )
     else:
         user = User(
             id=profile.id,
             age=profile.age,
             gender=profile.gender,
-            favorite_category=profile.favoriteCategory,
+            favorite_category=profile.favoriteCategory.strip().lower() if profile.favoriteCategory else None,
             preference_gender=profile.preferenceGender,
             preference_age_min=profile.preferenceAgeMin,
             preference_age_max=profile.preferenceAgeMax,
@@ -154,6 +146,31 @@ def _user_profile_to_user(
         liked=list(liked_override if liked_override is not None else user.liked),
         disliked=list(disliked_override if disliked_override is not None else user.disliked),
     )
+
+def _needs_vocab_refit(featurizer: Featurizer, users: List[User]) -> bool:
+    if featurizer is None:
+        return True
+
+    vocab_games = featurizer.state.vocab_games
+    vocab_categories = featurizer.state.vocab_categories
+    vocab_languages = featurizer.state.vocab_languages
+
+    for user in users:
+        for g in user.favorite_games:
+            if g not in vocab_games:
+                return True
+        if user.favorite_category and user.favorite_category not in vocab_categories:
+            return True
+        for c in user.preference_categories:
+            if c not in vocab_categories:
+                return True
+        for l in user.languages:
+            if l not in vocab_languages:
+                return True
+        for l in user.preference_languages:
+            if l not in vocab_languages:
+                return True
+    return False
 
 @app.on_event("startup")
 async def startup_event():
@@ -253,17 +270,31 @@ async def recommend(request: RecommendationRequest):
         )
         candidates = [_user_profile_to_user(c, users_cache) for c in request.candidates]
         
+        # Refit vocab if request contains unseen tokens to avoid empty vectors
+        active_recommender = recommender
+        if recommender and recommender.featurizer:
+            if _needs_vocab_refit(recommender.featurizer, [target_user] + candidates):
+                active_recommender = ContentBasedRecommender(alpha=recommender.alpha, beta=recommender.beta, gamma=recommender.gamma)
+                active_recommender.fit([target_user] + candidates)
+                logger.info("[api] Rebuilt featurizer for request-scoped vocabulary")
+
         # Generate recommendations (using feedback mode by default)
         mode = request.mode or "feedback"
         if mode not in ("strict", "feedback"):
             logger.warning("[api] Unknown mode '%s', defaulting to feedback", mode)
             mode = "feedback"
 
-        recommendations = recommender.recommend(
+        filter_mode = (request.filterMode or "strict").lower()
+        if filter_mode not in ("strict", "relaxed"):
+            logger.warning("[api] Unknown filterMode '%s', defaulting to strict", filter_mode)
+            filter_mode = "strict"
+
+        recommendations = active_recommender.recommend(
             target_user=target_user,
             candidates=candidates,
             top_k=request.topK,
-            mode=mode
+            mode=mode,
+            filter_mode=filter_mode
         )
         
         # Convert to response format

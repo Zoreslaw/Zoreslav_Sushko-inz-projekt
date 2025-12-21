@@ -10,13 +10,13 @@ interface AlgorithmContextType {
 const AlgorithmContext = createContext<AlgorithmContextType | undefined>(undefined);
 
 export const AlgorithmProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentAlgorithm, setCurrentAlgorithm] = useState<string>('TwoTower');
+  const [currentAlgorithm, setCurrentAlgorithm] = useState<string>('Hybrid');
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshAlgorithm = async () => {
     try {
       const data = await mlAdminApi.getAlgorithm();
-      setCurrentAlgorithm(data.algorithm || 'TwoTower');
+      setCurrentAlgorithm(data.algorithm || 'Hybrid');
     } catch (err) {
       console.error('Failed to fetch algorithm:', err);
     } finally {

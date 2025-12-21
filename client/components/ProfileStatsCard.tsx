@@ -53,11 +53,8 @@ function StatPill({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    marginHorizontal: 16,
-    marginTop: 12,
+  card: { 
     padding: 16,
-    borderRadius: 16,
   },
   title: {
     fontSize: 16,

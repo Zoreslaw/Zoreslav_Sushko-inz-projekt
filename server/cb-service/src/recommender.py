@@ -36,7 +36,8 @@ class ContentBasedRecommender:
         target_user: User,
         candidates: List[User],
         top_k: int = 20,
-        mode: str = "strict"
+        mode: str = "strict",
+        filter_mode: str = "strict"
     ) -> List[Tuple[str, float]]:
         """
         Generate recommendations for target_user from candidates.
@@ -61,22 +62,22 @@ class ContentBasedRecommender:
             return []
         
         #
-        # Filter candidates - first try strict eligibility, then relax if needed
-        elig = make_eligibility_filter(target_user)
-        users_filtered = [u for u in candidates if u.id != target_user.id and elig(u)]
-        
-        # If we don't have enough candidates after strict filtering, relax the filter
-        # This ensures we can return the requested number of recommendations
-        if len(users_filtered) < top_k:
-            # Relaxed filter: only exclude self
+        # Filter candidates based on filter_mode
+        users_filtered: List[User]
+        if filter_mode == "strict":
+            elig = make_eligibility_filter(target_user)
+            users_filtered = [u for u in candidates if u.id != target_user.id and elig(u)]
+            if len(users_filtered) < top_k:
+                users_filtered = [u for u in candidates if u.id != target_user.id]
+                if len(users_filtered) > len([u for u in candidates if u.id != target_user.id and elig(u)]):
+                    logger.debug(
+                        "[recommender] Relaxed eligibility filter for target_user=%s: %d -> %d candidates",
+                        target_user.id,
+                        len([u for u in candidates if u.id != target_user.id and elig(u)]),
+                        len(users_filtered)
+                    )
+        else:
             users_filtered = [u for u in candidates if u.id != target_user.id]
-            if len(users_filtered) > len([u for u in candidates if u.id != target_user.id and elig(u)]):
-                logger.debug(
-                    "[recommender] Relaxed eligibility filter for target_user=%s: %d -> %d candidates",
-                    target_user.id,
-                    len([u for u in candidates if u.id != target_user.id and elig(u)]),
-                    len(users_filtered)
-                )
         
         if not users_filtered:
             logger.warning("[recommender] No eligible candidates after filtering for target_user=%s", target_user.id)

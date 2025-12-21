@@ -147,6 +147,10 @@ def _normalize_langs(items: List[str]) -> List[str]:
     """Lowercase and strip language tags like EN -> en."""
     return _dedup_keep_order([x.strip().lower() for x in items if x and x.strip()])
 
+def _normalize_tokens(items: List[str]) -> List[str]:
+    """Lowercase and strip generic tokens (games/categories)."""
+    return _dedup_keep_order([x.strip().lower() for x in items if x and x.strip()])
+
 def _coerce_array_field(v: Any) -> List[str]:
     """Accepts None | str (PG-array) | list -> returns List[str] cleaned.
     - If list: cast each element to str, strip, drop empties
@@ -200,12 +204,12 @@ def map_backend_to_user(row: BackendUserRow) -> User:
     steam_cats_raw           = _coerce_array_field(row.steam_categories)
 
     # Normalize lists
-    favorite_games           = _dedup_keep_order([
-        x.strip() for x in (games_raw + other_games_raw + steam_games_raw) if x and x.strip()
+    favorite_games           = _normalize_tokens([
+        x for x in (games_raw + other_games_raw + steam_games_raw) if x and str(x).strip()
     ])
     languages                = _normalize_langs(langs_ui_raw)
-    preference_categories    = _dedup_keep_order([
-        x.strip() for x in (pref_cats_raw + steam_cats_raw) if x and x.strip()
+    preference_categories    = _normalize_tokens([
+        x for x in (pref_cats_raw + steam_cats_raw) if x and str(x).strip()
     ])
     preference_languages     = _normalize_langs(pref_langs_raw)
     liked                    = _dedup_keep_order([x.strip() for x in liked_raw if x and x.strip()])
@@ -233,7 +237,7 @@ def map_backend_to_user(row: BackendUserRow) -> User:
         gender=row.gender,
         description=row.description,
         photo_url=row.photo_url,
-        favorite_category=row.favorite_category,
+        favorite_category=row.favorite_category.strip().lower() if row.favorite_category and str(row.favorite_category).strip() else None,
         preference_gender=row.preference_gender,
         preference_age_min=pref_min,
         preference_age_max=pref_max,

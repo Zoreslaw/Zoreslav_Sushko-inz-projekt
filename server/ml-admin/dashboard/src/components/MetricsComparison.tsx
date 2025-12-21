@@ -38,6 +38,7 @@ export const MetricsComparison: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [mlMetrics, setMlMetrics] = useState<MetricsData | null>(null);
   const [cbMetrics, setCbMetrics] = useState<MetricsData | null>(null);
+  const [hybridMetrics, setHybridMetrics] = useState<MetricsData | null>(null);
   const kValues = [5, 10, 20];
 
   useEffect(() => {
@@ -52,14 +53,17 @@ export const MetricsComparison: React.FC = () => {
         if (comparison) {
           setMlMetrics(comparison.TwoTower || null);
           setCbMetrics(comparison.ContentBased || null);
+          setHybridMetrics(comparison.Hybrid || null);
         } else {
           // Fallback to separate calls if comparison endpoint fails
-          const [ml, cb] = await Promise.all([
+          const [ml, cb, hybrid] = await Promise.all([
             mlAdminApi.getAggregateMetrics('TwoTower', kValues).catch(() => null),
             mlAdminApi.getAggregateMetrics('ContentBased', kValues).catch(() => null),
+            mlAdminApi.getAggregateMetrics('Hybrid', kValues).catch(() => null),
           ]);
           setMlMetrics(ml);
           setCbMetrics(cb);
+          setHybridMetrics(hybrid);
         }
       } catch (err: any) {
         setError(err.message || 'Failed to fetch metrics');
@@ -87,7 +91,7 @@ export const MetricsComparison: React.FC = () => {
     );
   }
 
-  if (error || (!mlMetrics && !cbMetrics)) {
+  if (error || (!mlMetrics && !cbMetrics && !hybridMetrics)) {
     return (
       <Card>
         <CardContent>
@@ -104,11 +108,17 @@ export const MetricsComparison: React.FC = () => {
     return (val * 100).toFixed(2) + '%';
   };
 
-  const getBetter = (ml: number | undefined, cb: number | undefined) => {
-    if (ml === undefined && cb === undefined) return null;
-    if (ml === undefined) return 'cb';
-    if (cb === undefined) return 'ml';
-    return ml > cb ? 'ml' : ml < cb ? 'cb' : 'tie';
+  const getBest = (ml: number | undefined, cb: number | undefined, hybrid: number | undefined) => {
+    const candidates = [
+      { key: 'ml', val: ml },
+      { key: 'cb', val: cb },
+      { key: 'hybrid', val: hybrid },
+    ].filter((item) => item.val !== undefined) as { key: string; val: number }[];
+    if (candidates.length === 0) return null;
+    const maxVal = Math.max(...candidates.map((c) => c.val));
+    const winners = candidates.filter((c) => c.val === maxVal).map((c) => c.key);
+    if (winners.length !== 1) return 'tie';
+    return winners[0];
   };
 
   const formatFraction = (val: number | undefined) => {
@@ -120,15 +130,15 @@ export const MetricsComparison: React.FC = () => {
     return val.toFixed(1);
   };
 
-  const evaluation = mlMetrics?.evaluation || cbMetrics?.evaluation;
+  const evaluation = mlMetrics?.evaluation || cbMetrics?.evaluation || hybridMetrics?.evaluation;
 
   const metrics = [
-    { name: 'Precision', ml: mlMetrics?.avgPrecisionAtK, cb: cbMetrics?.avgPrecisionAtK },
-    { name: 'Recall', ml: mlMetrics?.avgRecallAtK, cb: cbMetrics?.avgRecallAtK },
-    { name: 'NDCG', ml: mlMetrics?.avgNDCGAtK, cb: cbMetrics?.avgNDCGAtK },
-    { name: 'Hit Rate', ml: mlMetrics?.avgHitRateAtK, cb: cbMetrics?.avgHitRateAtK },
-    { name: 'Mutual Accept Rate', ml: mlMetrics?.avgMutualAcceptRateAtK, cb: cbMetrics?.avgMutualAcceptRateAtK },
-    { name: 'Chat Start Rate', ml: mlMetrics?.avgChatStartRateAtK, cb: cbMetrics?.avgChatStartRateAtK },
+    { name: 'Precision', ml: mlMetrics?.avgPrecisionAtK, cb: cbMetrics?.avgPrecisionAtK, hybrid: hybridMetrics?.avgPrecisionAtK },
+    { name: 'Recall', ml: mlMetrics?.avgRecallAtK, cb: cbMetrics?.avgRecallAtK, hybrid: hybridMetrics?.avgRecallAtK },
+    { name: 'NDCG', ml: mlMetrics?.avgNDCGAtK, cb: cbMetrics?.avgNDCGAtK, hybrid: hybridMetrics?.avgNDCGAtK },
+    { name: 'Hit Rate', ml: mlMetrics?.avgHitRateAtK, cb: cbMetrics?.avgHitRateAtK, hybrid: hybridMetrics?.avgHitRateAtK },
+    { name: 'Mutual Accept Rate', ml: mlMetrics?.avgMutualAcceptRateAtK, cb: cbMetrics?.avgMutualAcceptRateAtK, hybrid: hybridMetrics?.avgMutualAcceptRateAtK },
+    { name: 'Chat Start Rate', ml: mlMetrics?.avgChatStartRateAtK, cb: cbMetrics?.avgChatStartRateAtK, hybrid: hybridMetrics?.avgChatStartRateAtK },
   ];
 
   return (
@@ -166,6 +176,9 @@ export const MetricsComparison: React.FC = () => {
                 <TableCell align="right">
                   <Chip label="ContentBased" color="secondary" size="small" />
                 </TableCell>
+                <TableCell align="right">
+                  <Chip label="Hybrid" color="success" size="small" />
+                </TableCell>
                 <TableCell align="center"><strong>Winner</strong></TableCell>
               </TableRow>
             </TableHead>
@@ -175,7 +188,8 @@ export const MetricsComparison: React.FC = () => {
                   {kValues.map((k, kIdx) => {
                     const mlVal = metric.ml?.[k];
                     const cbVal = metric.cb?.[k];
-                    const winner = getBetter(mlVal, cbVal);
+                    const hybridVal = metric.hybrid?.[k];
+                    const winner = getBest(mlVal, cbVal, hybridVal);
                     return (
                       <TableRow key={`${metric.name}-${k}`}>
                         {kIdx === 0 && (
@@ -186,9 +200,11 @@ export const MetricsComparison: React.FC = () => {
                         <TableCell align="center">@{k}</TableCell>
                         <TableCell align="right">{formatValue(mlVal)}</TableCell>
                         <TableCell align="right">{formatValue(cbVal)}</TableCell>
+                        <TableCell align="right">{formatValue(hybridVal)}</TableCell>
                         <TableCell align="center">
                           {winner === 'ml' && <Chip label="ML" color="primary" size="small" />}
                           {winner === 'cb' && <Chip label="CB" color="secondary" size="small" />}
+                          {winner === 'hybrid' && <Chip label="Hybrid" color="success" size="small" />}
                           {winner === 'tie' && <Chip label="Tie" size="small" />}
                           {winner === null && <Typography variant="caption">-</Typography>}
                         </TableCell>
@@ -202,9 +218,9 @@ export const MetricsComparison: React.FC = () => {
         </TableContainer>
 
         {/* Comparison Charts */}
-        {mlMetrics && cbMetrics && (
+        {(mlMetrics || cbMetrics || hybridMetrics) && (
           <Box mt={3}>
-            <ComparisonCharts mlMetrics={mlMetrics} cbMetrics={cbMetrics} />
+            <ComparisonCharts mlMetrics={mlMetrics} cbMetrics={cbMetrics} hybridMetrics={hybridMetrics} />
           </Box>
         )}
       </CardContent>

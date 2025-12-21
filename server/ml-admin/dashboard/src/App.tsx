@@ -38,6 +38,7 @@ import {
   Psychology,
   Storage,
   SportsEsports,
+  SettingsApplications,
 } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { ModelInfoCard } from './components/ModelInfoCard';
@@ -186,6 +187,7 @@ const PageHero: React.FC<{
 const AppContent: React.FC = () => {
   const { currentAlgorithm } = useAlgorithm();
   const isContentBased = currentAlgorithm === 'ContentBased';
+  const isHybrid = currentAlgorithm === 'Hybrid';
   const theme = useTheme();
   const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -359,7 +361,7 @@ const AppContent: React.FC = () => {
           )}
           <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexGrow: 1 }}>
             <Avatar sx={{ bgcolor: alpha('#ffffff', 0.2), width: 36, height: 36 }}>
-              <AutoGraph fontSize="small" />
+              <SettingsApplications fontSize="small" />
             </Avatar>
             <Box>
               <Typography variant="subtitle1">ML Operations Dashboard</Typography>
@@ -475,9 +477,20 @@ const AppContent: React.FC = () => {
                   <Grid size={{ xs: 12, md: 6 }}>
                     <ModelInfoCard />
                   </Grid>
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    {isContentBased ? <CBServiceStatus /> : <MLServiceStatus />}
-                  </Grid>
+                  {isHybrid ? (
+                    <>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <MLServiceStatus />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <CBServiceStatus />
+                      </Grid>
+                    </>
+                  ) : (
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      {isContentBased ? <CBServiceStatus /> : <MLServiceStatus />}
+                    </Grid>
+                  )}
                 </Grid>
               </Stack>
             )}

@@ -6,7 +6,7 @@ namespace TeamUp.Api.Services;
 /// </summary>
 public class AlgorithmService
 {
-    private string _currentAlgorithm = "TwoTower"; // Default algorithm
+    private string _currentAlgorithm = "Hybrid"; // Default algorithm
     private readonly object _lock = new object();
     private readonly ILogger<AlgorithmService> _logger;
 
@@ -27,7 +27,7 @@ public class AlgorithmService
     }
 
     /// <summary>
-    /// Sets the current algorithm. Valid values: "TwoTower" or "ContentBased"
+    /// Sets the current algorithm. Valid values: "TwoTower", "ContentBased", or "Hybrid"
     /// </summary>
     public bool SetAlgorithm(string algorithm)
     {
@@ -38,7 +38,8 @@ public class AlgorithmService
 
         var normalized = algorithm.Trim();
         if (normalized.Equals("TwoTower", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals("ContentBased", StringComparison.OrdinalIgnoreCase))
+            normalized.Equals("ContentBased", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("Hybrid", StringComparison.OrdinalIgnoreCase))
         {
             lock (_lock)
             {

@@ -18,9 +18,14 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 
 # domain + training remain your originals
 sys.path.append('/app/network')
-from models.neural_network_v6 import TwoTowerV6Extreme
-from training.trainer_v6 import train_model_v6_extreme
 from models.domain import DataStore, UserProfile, InteractionSet
+from training.trainer_hybrid import train_model_hybrid
+from data.hybrid_features import (
+    build_feature_config,
+    normalize_list,
+    normalize_gender,
+    hash_user_id,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +55,7 @@ class TrainingConfig:
 
     MIN_USERS = int(os.getenv('MIN_USERS', '10'))
     MIN_INTERACTIONS = int(os.getenv('MIN_INTERACTIONS', '5'))
+    USER_HASH_BUCKETS = int(os.getenv('USER_HASH_BUCKETS', '100000'))
 
 def get_db_connection():
     try:
@@ -65,26 +71,50 @@ def get_db_connection():
         logger.error(f"Database connection failed: {e}")
         raise
 
-def load_users_from_db() -> List[UserProfile]:
+def load_users_from_db() -> tuple[List[UserProfile], Dict[str, int]]:
     conn = get_db_connection()
     cur = conn.cursor()
     try:
         # prefer snake_case columns in Postgres
-        cur.execute('SELECT id, age, gender, favorite_games, created_at FROM users ORDER BY created_at')
+        cur.execute('''
+            SELECT id, age, gender,
+                   favorite_games, other_games, steam_games,
+                   favorite_category, steam_categories,
+                   languages, created_at
+            FROM users
+            ORDER BY created_at
+        ''')
         rows = cur.fetchall()
 
         users: List[UserProfile] = []
+        id_to_idx: Dict[str, int] = {}
         for row in rows:
-            gender_raw = (row.get('gender') or '').strip()
-            gender = 'M' if gender_raw == 'Male' else 'F'
+            raw_id = str(row['id'])
+            raw_games = (row.get('favorite_games') or []) + (row.get('other_games') or []) + (row.get('steam_games') or [])
+            games = normalize_list(raw_games)
+
+            categories = []
+            if row.get('favorite_category'):
+                categories.append(row.get('favorite_category'))
+            categories.extend(row.get('steam_categories') or [])
+            categories = normalize_list(categories)
+
+            languages = normalize_list(row.get('languages') or [], is_language=True)
+
+            gender = normalize_gender(row.get('gender'))
+            age = int(row.get('age') or 18)
+            user_hash = hash_user_id(raw_id, TrainingConfig.USER_HASH_BUCKETS)
             users.append(UserProfile(
-                user_id=row['id'],
-                age=row['age'],
+                user_id=user_hash,
+                age=age,
                 gender=gender,
-                games=row.get('favorite_games') or []
+                games=games,
+                categories=categories,
+                languages=languages
             ))
+            id_to_idx[raw_id] = len(users) - 1
         logger.info(f"Loaded {len(users)} users from database")
-        return users
+        return users, id_to_idx
     finally:
         cur.close(); conn.close()
 
@@ -130,7 +160,7 @@ def train_model():
 
     try:
         logger.info("Loading data from PostgreSQL...")
-        users = load_users_from_db()
+        users, uid_to_idx = load_users_from_db()
         inter = load_interactions_from_db()
         total_inter = len(inter.positives) + len(inter.negatives)
 
@@ -168,12 +198,16 @@ def train_model():
             })
             return False
 
+        logger.info("Building feature config...")
+        cfg = build_feature_config(
+            [(u.games, u.categories, u.languages, u.age) for u in users],
+            user_hash_buckets=TrainingConfig.USER_HASH_BUCKETS,
+            min_age=18,
+            max_age=100,
+        )
+
         logger.info("Building DataStore...")
         dat = DataStore()
-
-        uid_to_idx = {u.user_id: i for i, u in enumerate(users)}
-        for i, u in enumerate(users):
-            u.user_id = i
         dat.users = users
 
         re = InteractionSet()
@@ -188,9 +222,9 @@ def train_model():
         re_total = len(re.positives) + len(re.negatives)
         logger.info(f"Training on {len(users)} users with {re_total} interactions")
         logger.info("=" * 60)
-        logger.info("Starting model training with V6 EXTREME...")
+        logger.info("Starting hybrid Two-Tower training...")
         logger.info(f"Configuration: {len(users)} users, {re_total} interactions")
-        logger.info(f"Epochs: 100, Learning Rate: 1e-4, Batch Size: 16")
+        logger.info(f"Epochs: 40, Learning Rate: 2e-4, Batch Size: 64")
         logger.info("=" * 60)
         
         # Check for stop flag before starting training
@@ -209,25 +243,20 @@ def train_model():
             })
             return False
 
-        model = train_model_v6_extreme(
+        model = train_model_hybrid(
             dat,
-            epochs=80,
-            lr=1e-4,
-            batch_size=16,
+            cfg,
+            epochs=40,
+            lr=2e-4,
+            batch_size=64,
             device=None,
             log_fn=lambda m: logger.info(m),
             dropout=0.3,
-            use_scheduler=True,
-            focal_gamma=2.0,
-            rejection_weight=0.5,
-            intersection_weight=0.3,
-            use_weighted_sampling=True,
-            emb_age_dim=32,
-            emb_user_dim=64,
-            game_emb_dim=64,
-            tower_hidden=(512, 256, 128),
-            out_dim=128,
-            temperature=0.07
+            tower_hidden=(256, 128),
+            out_dim=64,
+            emb_user_dim=32,
+            emb_token_dim=32,
+            hard_negative_ratio=0.3
         )
 
         logger.info("=" * 60)
@@ -257,7 +286,13 @@ def train_model():
         
         logger.info(f"Saving model to {model_path}")
         tmp = model_path + '.tmp'
-        torch.save(model.state_dict(), tmp)
+        bundle = {
+            "state_dict": model.state_dict(),
+            "feature_config": cfg.to_dict(),
+            "model_version": model_version,
+            "architecture": "TwoTowerHybrid",
+        }
+        torch.save(bundle, tmp)
         os.replace(tmp, model_path)
         
         # Save training log for this model version

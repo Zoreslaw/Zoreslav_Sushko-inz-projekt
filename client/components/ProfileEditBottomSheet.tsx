@@ -44,7 +44,13 @@ const ProfileEditBottomSheet = forwardRef<ProfileEditSheetRef>((_, ref) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
   const maxDynamicContentSize = useMemo(() => {
     const topGap = safeTopArea + 24;
-    return Math.max(windowHeight - topGap, windowHeight * 0.9);
+    // Original logic for smaller content
+    const originalSize = Math.max(windowHeight - topGap, windowHeight * 0.9);
+    // Only cap at 80% if it would otherwise be near 100% (above 95% threshold)
+    if (originalSize > windowHeight * 0.95) {
+      return windowHeight * 0.80;
+    }
+    return originalSize;
   }, [windowHeight, safeTopArea]);
 
   useImperativeHandle(ref, () => ({

@@ -25,6 +25,7 @@ public class CBServiceClient
         List<User> candidates, 
         int topK = 10,
         string? mode = null,
+        string? filterMode = null,
         IReadOnlyCollection<string>? targetLikedIds = null,
         IReadOnlyCollection<string>? targetDislikedIds = null)
     {
@@ -36,6 +37,7 @@ public class CBServiceClient
                 Candidates = candidates.Select(MapToUserProfile).ToList(),
                 TopK = topK,
                 Mode = mode,
+                FilterMode = filterMode,
                 TargetLikedIds = targetLikedIds?.ToList(),
                 TargetDislikedIds = targetDislikedIds?.ToList()
             };

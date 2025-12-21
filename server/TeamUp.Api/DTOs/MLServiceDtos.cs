@@ -6,6 +6,7 @@ public class MLRecommendationRequest
     public List<UserProfile> Candidates { get; set; } = new();
     public int TopK { get; set; } = 10;
     public string? Mode { get; set; }
+    public string? FilterMode { get; set; }
     public List<string>? TargetLikedIds { get; set; }
     public List<string>? TargetDislikedIds { get; set; }
 }

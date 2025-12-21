@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TeamUp ML Service - Flask API for Two-Tower V6 Recommendation Model
-Refactor: safer feature building & batch embed shapes.
+TeamUp ML Service - Flask API for Hybrid Two-Tower Recommendation Model.
 """
 
 import os
@@ -14,12 +13,18 @@ from typing import Dict, Any, List
 
 from flask import Flask, request, jsonify
 import torch
-import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from models.domain import DataStore, GAMES
-from models.neural_network_v6 import TwoTowerV6Extreme
+from data.hybrid_features import (
+    HybridFeatureConfig,
+    encode_gender_onehot,
+    encode_tokens,
+    normalize_age,
+    normalize_list,
+    hash_user_id,
+)
+from models.neural_network_hybrid import TwoTowerHybrid
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -28,8 +33,18 @@ app = Flask(__name__)
 
 MODEL = None
 DEVICE = None
-MODEL_VERSION = "v6-optimal"
-GAME_NAME_TO_INDEX = {game: idx for idx, game in enumerate(GAMES)}
+MODEL_VERSION = "hybrid-v1"
+FEATURE_CONFIG = None
+
+def _default_feature_config() -> HybridFeatureConfig:
+    return HybridFeatureConfig(
+        game_to_id={},
+        category_to_id={},
+        language_to_id={},
+        age_min=18,
+        age_max=100,
+        user_hash_buckets=100_000,
+    )
 
 def load_model():
     global MODEL, DEVICE
@@ -38,37 +53,98 @@ def load_model():
 
     model_path = os.getenv('MODEL_PATH', '/app/models/twotower_v6_optimal.pt')
 
-    MODEL = TwoTowerV6Extreme(
-        num_users=10000,
-        emb_user_dim=64,
-        emb_age_dim=32,
-        game_emb_dim=64,
-        tower_hidden=(512, 256, 128),
-        out_dim=128,
-        dropout=0.3,
-        temperature=0.07
-    ).to(DEVICE)
-
+    cfg = _default_feature_config()
     if os.path.exists(model_path):
         ckpt = torch.load(model_path, map_location=DEVICE)
+        if isinstance(ckpt, dict) and "state_dict" in ckpt:
+            cfg = HybridFeatureConfig.from_dict(ckpt.get("feature_config", {}))
+            state_dict = ckpt.get("state_dict", {})
+            model_version = ckpt.get("model_version")
+            if model_version:
+                global MODEL_VERSION
+                MODEL_VERSION = str(model_version)
+        else:
+            state_dict = ckpt
+        MODEL = TwoTowerHybrid(
+            user_hash_buckets=cfg.user_hash_buckets,
+            game_vocab_size=cfg.game_vocab_size,
+            category_vocab_size=cfg.category_vocab_size,
+            language_vocab_size=cfg.language_vocab_size,
+            emb_user_dim=32,
+            emb_token_dim=32,
+            tower_hidden=(256, 128),
+            out_dim=64,
+            dropout=0.3,
+            temperature=0.1
+        ).to(DEVICE)
         model_dict = MODEL.state_dict()
-        filtered = {k: v for k, v in ckpt.items() if k in model_dict and model_dict[k].shape == v.shape}
+        filtered = {k: v for k, v in state_dict.items() if k in model_dict and model_dict[k].shape == v.shape}
         model_dict.update(filtered)
         MODEL.load_state_dict(model_dict)
-        logger.info(f"Model loaded from {model_path} ({len(filtered)}/{len(ckpt)} tensors)")
+        logger.info(f"Model loaded from {model_path} ({len(filtered)}/{len(state_dict)} tensors)")
     else:
+        MODEL = TwoTowerHybrid(
+            user_hash_buckets=cfg.user_hash_buckets,
+            game_vocab_size=cfg.game_vocab_size,
+            category_vocab_size=cfg.category_vocab_size,
+            language_vocab_size=cfg.language_vocab_size,
+            emb_user_dim=32,
+            emb_token_dim=32,
+            tower_hidden=(256, 128),
+            out_dim=64,
+            dropout=0.3,
+            temperature=0.1
+        ).to(DEVICE)
         logger.warning(f"Model file not found at {model_path}, using untrained model")
+
+    global FEATURE_CONFIG
+    FEATURE_CONFIG = cfg
 
     MODEL.eval()
     logger.info("Model initialization complete")
 
-def user_dict_to_features(user: Dict[str, Any], user_id_idx: int = 0):
-    age = int(user.get('age', 25))
-    gender = user.get('gender', 'Male')
-    gender_numeric = 0 if gender == 'Male' else 1
-    games_names = user.get('games', []) or user.get('favoriteGames', []) or []
-    game_indices = [GAME_NAME_TO_INDEX[g] for g in games_names if g in GAME_NAME_TO_INDEX] or [0]
-    return user_id_idx, age, gender_numeric, game_indices
+def user_dict_to_features(user: Dict[str, Any], cfg: HybridFeatureConfig):
+    raw_games = (user.get('games') or user.get('favoriteGames') or [])
+    raw_games += user.get('otherGames') or []
+    raw_games += user.get('steamGames') or []
+    games = normalize_list(raw_games)
+
+    categories = []
+    if user.get('favoriteCategory'):
+        categories.append(user.get('favoriteCategory'))
+    categories += user.get('steamCategories') or []
+    categories = normalize_list(categories)
+
+    languages = normalize_list(user.get('languages') or [], is_language=True)
+
+    user_id = str(user.get('id') or "")
+    uid_hash = hash_user_id(user_id, cfg.user_hash_buckets)
+    age = int(user.get('age') or cfg.age_min)
+    gender = user.get('gender')
+
+    return {
+        "user_id": uid_hash,
+        "age": normalize_age(age, cfg),
+        "gender": encode_gender_onehot(gender),
+        "games": encode_tokens(games, cfg.game_to_id),
+        "categories": encode_tokens(categories, cfg.category_to_id),
+        "languages": encode_tokens(languages, cfg.language_to_id),
+        "raw_id": user_id,
+    }
+
+def build_batch_tensors(features: List[Dict[str, Any]]):
+    user_ids = [f["user_id"] for f in features]
+    ages = [[f["age"]] for f in features]
+    genders = [f["gender"] for f in features]
+    games = [f["games"] for f in features]
+    categories = [f["categories"] for f in features]
+    languages = [f["languages"] for f in features]
+
+    user_ids_t = torch.tensor(user_ids, dtype=torch.long, device=DEVICE)
+    age_t = torch.tensor(ages, dtype=torch.float32, device=DEVICE)
+    gender_t = torch.tensor(genders, dtype=torch.float32, device=DEVICE)
+
+    return user_ids_t, age_t, gender_t, games, categories, languages
 
 @app.get('/health')
 def health_check():
@@ -96,25 +172,25 @@ def recommend():
 
         logger.info(f"Recommendation: target={target_user.get('id')} candidates={len(candidates)} topK={top_k}")
 
-        # target
-        uid_t, age_t, gen_t, games_t = user_dict_to_features(target_user, user_id_idx=0)
-        uid_t = torch.tensor([uid_t], dtype=torch.long, device=DEVICE)
-        age_t = torch.tensor([[age_t / 100.0]], dtype=torch.float32, device=DEVICE)
-        gen_t = torch.tensor([[1.0, 0.0] if gen_t == 0 else [0.0, 1.0]], dtype=torch.float32, device=DEVICE)
+        if FEATURE_CONFIG is None:
+            return jsonify({'error': 'Model feature config unavailable'}), 503
+
+        target_features = user_dict_to_features(target_user, FEATURE_CONFIG)
+        candidate_features = [user_dict_to_features(c, FEATURE_CONFIG) for c in candidates]
+
+        uid_t, age_t, gen_t, games_t, cats_t, langs_t = build_batch_tensors([target_features])
+        uid_c, age_c, gen_c, games_c, cats_c, langs_c = build_batch_tensors(candidate_features)
 
         with torch.no_grad():
-            target_emb, _ = MODEL.encode_user(uid_t, age_t, gen_t, [games_t])
+            target_emb = MODEL.encode_user(uid_t, age_t, gen_t, games_t, cats_t, langs_t)
+            cand_emb = MODEL.encode_item(uid_c, age_c, gen_c, games_c, cats_c, langs_c)
+            scores_tensor = MODEL.score(target_emb.expand(cand_emb.shape[0], -1), cand_emb)
 
-        scores = []
-        for idx, cand in enumerate(candidates):
-            uid_c, age_c, gen_c, games_c = user_dict_to_features(cand, user_id_idx=idx + 1)
-            uid_c = torch.tensor([uid_c], dtype=torch.long, device=DEVICE)
-            age_c = torch.tensor([[age_c / 100.0]], dtype=torch.float32, device=DEVICE)
-            gen_c = torch.tensor([[1.0, 0.0] if gen_c == 0 else [0.0, 1.0]], dtype=torch.float32, device=DEVICE)
-            with torch.no_grad():
-                cand_emb, _ = MODEL.encode_item(uid_c, age_c, gen_c, [games_c])
-                score = MODEL.score(target_emb, cand_emb).item()
-            scores.append({'userId': cand['id'], 'score': float(score)})
+        scores_list = scores_tensor.cpu().numpy().tolist()
+        scores = [
+            {'userId': candidates[i]['id'], 'score': float(scores_list[i])}
+            for i in range(len(candidates))
+        ]
 
         scores.sort(key=lambda x: x['score'], reverse=True)
         top = scores[:top_k]
@@ -142,14 +218,16 @@ def batch_embed():
 
         embeddings: Dict[str, List[float]] = {}
 
-        for idx, user in enumerate(users):
-            uid, age, gen, games = user_dict_to_features(user, user_id_idx=idx)
-            uid_t = torch.tensor([uid], dtype=torch.long, device=DEVICE)
-            age_t = torch.tensor([[age / 100.0]], dtype=torch.float32, device=DEVICE)
-            gen_t = torch.tensor([[1.0, 0.0] if gen == 0 else [0.0, 1.0]], dtype=torch.float32, device=DEVICE)
-            with torch.no_grad():
-                emb, _ = MODEL.encode_user(uid_t, age_t, gen_t, [games])
-                embeddings[user['id']] = emb.cpu().numpy().flatten().tolist()
+        if FEATURE_CONFIG is None:
+            return jsonify({'error': 'Model feature config unavailable'}), 503
+
+        encoded = [user_dict_to_features(u, FEATURE_CONFIG) for u in users]
+        uid_t, age_t, gen_t, games_t, cats_t, langs_t = build_batch_tensors(encoded)
+        with torch.no_grad():
+            emb = MODEL.encode_user(uid_t, age_t, gen_t, games_t, cats_t, langs_t)
+            emb_np = emb.cpu().numpy()
+            for idx, user in enumerate(users):
+                embeddings[user['id']] = emb_np[idx].flatten().tolist()
 
         dim = len(next(iter(embeddings.values())))
         return jsonify({'embeddings': embeddings, 'dimension': dim, 'modelVersion': MODEL_VERSION}), 200
@@ -164,17 +242,20 @@ def model_info():
         return jsonify({'error': 'Model not loaded'}), 503
     return jsonify({
         'version': MODEL_VERSION,
-        'architecture': 'TwoTowerV6Extreme',
+        'architecture': 'TwoTowerHybrid',
         'parameters': {
-            'emb_age_dim': 32,
-            'emb_user_dim': 64,
-            'game_emb_dim': 64,
-            'tower_hidden': [512, 256, 128],
-            'out_dim': 128,
-            'temperature': 0.07
+            'emb_user_dim': 32,
+            'emb_token_dim': 32,
+            'tower_hidden': [256, 128],
+            'out_dim': 64,
+            'temperature': 0.1
         },
         'device': str(DEVICE),
-        'games': GAMES,
+        'vocab': {
+            'games': len(FEATURE_CONFIG.game_to_id) if FEATURE_CONFIG else 0,
+            'categories': len(FEATURE_CONFIG.category_to_id) if FEATURE_CONFIG else 0,
+            'languages': len(FEATURE_CONFIG.language_to_id) if FEATURE_CONFIG else 0,
+        },
         'totalParameters': sum(p.numel() for p in MODEL.parameters())
     }), 200
 

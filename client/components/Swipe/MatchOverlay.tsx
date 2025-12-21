@@ -4,6 +4,7 @@ import * as Animatable from 'react-native-animatable';
 import { useRouter } from 'expo-router';
 // Import our separate FloatingEmojisAroundCard component
 import { FloatingEmojisAroundCard } from './FloatingEmojisAroundCard';
+import AvatarPlaceholder from '@/components/AvatarPlaceholder';
 
 interface MatchOverlayProps {
   visible: boolean;
@@ -12,6 +13,7 @@ interface MatchOverlayProps {
     displayName?: string;
     photoURL?: string;
   };
+  conversationId?: string | null;
   onClose?: () => void;
 }
 
@@ -20,13 +22,20 @@ const { width } = Dimensions.get('window');
 export default function MatchOverlay({
   visible,
   matchedUser,
+  conversationId,
   onClose,
 }: MatchOverlayProps) {
   const router = useRouter();
 
   const handleChatPress = () => {
-    if (matchedUser?.id) {
-      router.push(`/chat/${matchedUser.id}`);
+    if (conversationId) {
+      router.push(`/conversation/${conversationId}`);
+      onClose?.();
+    } else if (matchedUser?.id) {
+      // Fallback: if no conversationId, try to navigate with userId
+      // This shouldn't happen in normal flow, but just in case
+      console.warn('No conversationId provided, using userId as fallback');
+      router.push(`/conversation/${matchedUser.id}`);
       onClose?.();
     }
   };
@@ -69,13 +78,20 @@ export default function MatchOverlay({
 
           {/* Actual card content (photo, badge, name, button) */}
           <View style={styles.photoContainer}>
-            {matchedUser.photoURL ? (
+            {matchedUser.photoURL && matchedUser.photoURL.trim() !== '' ? (
               <Image
                 source={{ uri: matchedUser.photoURL }}
                 style={styles.userPhoto}
               />
             ) : (
-              <View style={styles.placeholderPhoto} />
+              <View style={styles.placeholderWrapper}>
+                <AvatarPlaceholder
+                  size={120}
+                  name={matchedUser.displayName}
+                  backgroundColor="#333"
+                  textColor="#FFF"
+                />
+              </View>
             )}
             <View style={styles.matchBadge}>
               <Text style={styles.matchBadgeText}>MATCH</Text>
@@ -148,13 +164,13 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#A100FF',
   },
-  placeholderPhoto: {
+  placeholderWrapper: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#333',
     borderWidth: 3,
     borderColor: '#A100FF',
+    overflow: 'hidden',
   },
   matchBadge: {
     position: 'absolute',

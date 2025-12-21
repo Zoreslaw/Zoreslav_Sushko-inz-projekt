@@ -30,7 +30,7 @@ export default function ChatCard({
         <TouchableOpacity style={styles.container} onPress={onPress}>
             {/* Avatar Section */}
             <View style={styles.avatarContainer}>
-                {avatarUrl ? (
+                {avatarUrl && avatarUrl.trim() !== '' ? (
                     <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
                 ) : (
                     <DefaultAvatarIcon

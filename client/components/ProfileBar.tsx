@@ -27,7 +27,7 @@ const ProfileBar: React.FC<ProfileBarProps> = ({
     <View>
       <View style={[styles.profileBarContainer, { backgroundColor }]}>
         <TouchableOpacity onPress={onAvatarPress} style={styles.avatarContainer}>
-          {avatarUrl ? (
+          {avatarUrl && avatarUrl.trim() !== '' ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
           ) : (
             <DefaultAvatarIcon

@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ModalRN from 'react-native-modal';
 // Import MaterialCommunityIcons
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AvatarPlaceholder from '@/components/AvatarPlaceholder';
 
 interface SwipeCardProps {
   card: {
@@ -35,15 +36,18 @@ export default function SwipeCard({ card, overlay, style }: SwipeCardProps) {
     return <View />;
   }
 
+  const hasValidPhoto = card.user.photoURL && card.user.photoURL.trim() !== '';
+
   return (
     <>
       {/* Main card container */}
       <View style={[styles.cardContainer, style]}>
-        <ImageBackground
-          source={{ uri: card.user.photoURL }}
-          style={styles.cardImage}
-          imageStyle={styles.cardImageStyle}
-        >
+        {hasValidPhoto ? (
+          <ImageBackground
+            source={{ uri: card.user.photoURL }}
+            style={styles.cardImage}
+            imageStyle={styles.cardImageStyle}
+          >
           {/* Gradient overlay */}
           <LinearGradient
             colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.9)']}
@@ -83,6 +87,44 @@ export default function SwipeCard({ card, overlay, style }: SwipeCardProps) {
             </Text>
           </View>
         </ImageBackground>
+        ) : (
+          <View style={styles.cardImage}>
+            <View style={styles.placeholderContainer}>
+              <View style={styles.placeholderBackground} />
+              <AvatarPlaceholder
+                size={Math.min(width * 0.6, 300)}
+                name={card.user.displayName}
+                backgroundColor="rgba(255, 255, 255, 0.15)"
+                textColor="#FFF"
+              />
+            </View>
+            <LinearGradient
+              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.9)']}
+              style={[StyleSheet.absoluteFillObject, { zIndex: 1 }]}
+            />
+            <View style={[overlay || styles.defaultOverlay, { zIndex: 1 }]} />
+            <View style={styles.textContainer}>
+              <Text style={styles.nameText}>{card.user.displayName}</Text>
+              <TouchableOpacity
+                style={styles.bioBadge}
+                onPress={() => setShowBio(true)}
+              >
+                <Text style={styles.bioBadgeText}>User BIO</Text>
+                <View style={styles.iconCircle}>
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={12}
+                    color="#FFF"
+                  />
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.favGamesLabel}>Favorite games:</Text>
+              <Text style={styles.favGamesValue}>
+                {card.user.favoriteGames?.join(', ') || 'No favorites'}
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Full screen modal for extended bio */}
@@ -134,6 +176,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
     resizeMode: 'cover',
   },
+  placeholderContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 0,
+  },
+  placeholderBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#1a1a1a',
+  },
   defaultOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -141,6 +193,8 @@ const styles = StyleSheet.create({
   textContainer: {
     padding: 20,
     width: '100%',
+    zIndex: 10,
+    position: 'relative',
   },
 
   /* Name style */

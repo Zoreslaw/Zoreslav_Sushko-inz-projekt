@@ -27,6 +27,7 @@ export default function SwipeScreen() {
 
   const [showMatch, setShowMatch] = useState(false);
   const [matchedUser, setMatchedUser] = useState<any>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   // Called when user swipes right
   const handleSwipedRight = async (cardIndex: number) => {
@@ -40,8 +41,9 @@ export default function SwipeScreen() {
       const result = await likeUser({ id: swipedUser.id, isMatch: swipedUser.isMatch });
 
       if (result?.isMatch) {
-        console.log('It\'s a match!');
+        console.log('It\'s a match! Conversation:', result.conversationId);
         setMatchedUser(swipedUser);
+        setConversationId(result.conversationId || null);
         setShowMatch(true);
       }
     } catch (error) {
@@ -68,6 +70,7 @@ export default function SwipeScreen() {
   const handleMatchOverlayClose = () => {
     setShowMatch(false);
     setMatchedUser(null);
+    setConversationId(null);
   };
 
   // Renders each card in the deck
@@ -236,6 +239,7 @@ export default function SwipeScreen() {
       <MatchOverlay
         visible={showMatch}
         matchedUser={matchedUser}
+        conversationId={conversationId}
         onClose={handleMatchOverlayClose}
       />
     </View>

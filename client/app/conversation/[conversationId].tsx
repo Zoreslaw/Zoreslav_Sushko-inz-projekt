@@ -60,7 +60,7 @@ export default function ConversationScreen() {
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <ConversationHeader title={otherUserName} onBackPress={() => router.back()} />
-      <MessagesList messages={messages} myUserId={user?.uid} />      
+      <MessagesList messages={messages} myUserId={user?.userId} />      
       <ConversationInput onSend={handleSend} />
     </View>
   );

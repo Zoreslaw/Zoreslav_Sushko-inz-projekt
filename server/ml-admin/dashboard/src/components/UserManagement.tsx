@@ -52,6 +52,7 @@ import {
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { mlAdminApi } from '../api/mlAdminApi';
+import { UserMessagingStudio } from './UserMessagingStudio';
 
 type UserRecord = {
   id: string;
@@ -1768,6 +1769,7 @@ export const UserManagement: React.FC = () => {
                 <Tab label="Create" />
                 <Tab label="Interactions" />
                 <Tab label="Cleanup" />
+                <Tab label="Messaging" />
               </Tabs>
 
               {actionTab === 0 && (
@@ -2086,6 +2088,10 @@ export const UserManagement: React.FC = () => {
                   {deleteMessage && <Alert severity="success">{deleteMessage}</Alert>}
                   {deleteError && <Alert severity="error">{deleteError}</Alert>}
                 </Stack>
+              )}
+
+              {actionTab === 3 && (
+                <UserMessagingStudio users={users} defaultUserId={selectedUserId} />
               )}
             </CardContent>
           </Card>

@@ -768,6 +768,108 @@ def purge_user_interactions():
     except Exception as e:
         return jsonify({'error': str(e)}), 503
 
+@app.get('/api/admin/conversations')
+def admin_list_conversations():
+    try:
+        user_id = request.args.get('userId', '')
+        r = requests.get(
+            f'{BACKEND_URL}/api/admin/conversations',
+            params={'userId': user_id},
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.get('/api/admin/conversations/between')
+def admin_get_conversation_between():
+    try:
+        user_id = request.args.get('userId', '')
+        other_user_id = request.args.get('otherUserId', '')
+        r = requests.get(
+            f'{BACKEND_URL}/api/admin/conversations/between',
+            params={'userId': user_id, 'otherUserId': other_user_id},
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/admin/conversations')
+def admin_create_conversation():
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/admin/conversations',
+            json=data,
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.get('/api/admin/conversations/<conv_id>')
+def admin_get_conversation(conv_id):
+    try:
+        r = requests.get(f'{BACKEND_URL}/api/admin/conversations/{conv_id}', timeout=20)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.get('/api/admin/conversations/<conv_id>/messages')
+def admin_get_messages(conv_id):
+    try:
+        limit = request.args.get('limit', default=50, type=int)
+        before = request.args.get('before')
+        params = {'limit': limit}
+        if before:
+            params['before'] = before
+        r = requests.get(
+            f'{BACKEND_URL}/api/admin/conversations/{conv_id}/messages',
+            params=params,
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/admin/conversations/<conv_id>/messages')
+def admin_send_message(conv_id):
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/admin/conversations/{conv_id}/messages',
+            json=data,
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/admin/conversations/<conv_id>/messages/read')
+def admin_mark_messages_read(conv_id):
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/admin/conversations/{conv_id}/messages/read',
+            json=data,
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.delete('/api/admin/conversations/<conv_id>/messages/<message_id>')
+def admin_delete_message(conv_id, message_id):
+    try:
+        r = requests.delete(
+            f'{BACKEND_URL}/api/admin/conversations/{conv_id}/messages/{message_id}',
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
 @app.get('/api/steam/health')
 def steam_health():
     """Lightweight Steam API connectivity check via backend health endpoint."""

@@ -64,6 +64,50 @@ export type SteamCatalogResponse = {
   items: string[];
 };
 
+export type AdminConversationParticipant = {
+  userId: string;
+  displayName: string;
+  photoUrl?: string;
+  isOnline: boolean;
+  lastReadAt?: string;
+};
+
+export type AdminConversation = {
+  id: string;
+  initiatedBy: string;
+  initiatedAt: string;
+  lastUpdatedAt: string;
+  lastMessageText?: string;
+  lastMessageSenderId?: string;
+  lastMessageTimestamp?: string;
+  participants: AdminConversationParticipant[];
+};
+
+export type AdminConversationSummary = {
+  id: string;
+  otherUserId: string;
+  otherUserName: string;
+  otherUserPhotoUrl?: string;
+  otherUserOnline: boolean;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  lastMessageSenderId?: string;
+  unreadCount: number;
+  lastUpdatedAt: string;
+};
+
+export type AdminMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  recipientId: string;
+  message: string;
+  messageType: string;
+  status: string;
+  timestamp: string;
+  url?: string;
+};
+
 export type AggregateMetricsResponse = {
   algorithm: string;
   timestamp: string;
@@ -420,6 +464,65 @@ export const mlAdminApi = {
     removeFromDisliked?: boolean;
   }): Promise<any> {
     return fetchJSON('/api/users/interactions/purge', 'POST', payload);
+  },
+
+  // ---- Admin Conversations ----
+  async getAdminConversations(userId: string): Promise<AdminConversationSummary[]> {
+    const params = new URLSearchParams({ userId });
+    return fetchJSON(`/api/admin/conversations?${params.toString()}`, 'GET');
+  },
+
+  async getAdminConversationBetween(userId: string, otherUserId: string): Promise<AdminConversation> {
+    const params = new URLSearchParams({ userId, otherUserId });
+    return fetchJSON(`/api/admin/conversations/between?${params.toString()}`, 'GET');
+  },
+
+  async createAdminConversation(
+    userId: string,
+    otherUserId: string
+  ): Promise<{ conversationId: string; isNew: boolean }> {
+    return fetchJSON('/api/admin/conversations', 'POST', { userId, otherUserId });
+  },
+
+  async getAdminConversation(conversationId: string): Promise<AdminConversation> {
+    return fetchJSON(`/api/admin/conversations/${conversationId}`, 'GET');
+  },
+
+  async getAdminMessages(
+    conversationId: string,
+    limit: number = 50,
+    before?: string
+  ): Promise<AdminMessage[]> {
+    const params = new URLSearchParams();
+    params.append('limit', String(limit));
+    if (before) params.append('before', before);
+    return fetchJSON(`/api/admin/conversations/${conversationId}/messages?${params.toString()}`, 'GET');
+  },
+
+  async sendAdminMessage(
+    conversationId: string,
+    payload: { senderId: string; message?: string; messageType?: string; url?: string }
+  ): Promise<AdminMessage> {
+    const body: Record<string, any> = {
+      senderId: payload.senderId,
+      message: payload.message,
+      messageType: payload.messageType,
+    };
+    if (payload.url) {
+      body.Url = payload.url;
+    }
+    return fetchJSON(`/api/admin/conversations/${conversationId}/messages`, 'POST', body);
+  },
+
+  async markAdminMessagesRead(
+    conversationId: string,
+    payload: { userId: string; messageIds?: string[] }
+  ): Promise<{ marked_read: number }> {
+    return fetchJSON(`/api/admin/conversations/${conversationId}/messages/read`, 'POST', payload);
+  },
+
+  async deleteAdminMessage(conversationId: string, messageId: string): Promise<{ message: string }> {
+    return fetchJSON(`/api/admin/conversations/${conversationId}/messages/${messageId}`, 'DELETE');
   },
 
   // ---- Low-level utilities ----

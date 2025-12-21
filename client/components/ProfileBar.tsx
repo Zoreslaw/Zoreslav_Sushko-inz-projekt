@@ -5,6 +5,7 @@ import { Divider } from '@/components/ui/Divider';
 import { Feather } from '@expo/vector-icons';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 interface ProfileBarProps {
   avatarUrl: string;
@@ -22,13 +23,15 @@ const ProfileBar: React.FC<ProfileBarProps> = ({
   onEditPress,
   }) => {
   const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const secondaryTextColor = useThemeColor({}, 'secondaryText');
 
   return (
     <View>
       <View style={[styles.profileBarContainer, { backgroundColor }]}>
         <TouchableOpacity onPress={onAvatarPress} style={styles.avatarContainer}>
           {avatarUrl && avatarUrl.trim() !== '' ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            <Image source={{ uri: resolveMediaUrl(avatarUrl) }} style={styles.avatarImage} />
           ) : (
             <DefaultAvatarIcon
               width={60}
@@ -37,11 +40,11 @@ const ProfileBar: React.FC<ProfileBarProps> = ({
           )}
         </TouchableOpacity>
         <View style={styles.profileTextContainer}>
-          {name ? <Text style={styles.name}>{name}</Text> : ''}
-          {email ? <Text style={styles.email}>{email}</Text> : ''}
+          {name ? <Text style={[styles.name, { color: textColor }]}>{name}</Text> : ''}
+          {email ? <Text style={[styles.email, { color: secondaryTextColor }]}>{email}</Text> : ''}
         </View>
         <TouchableOpacity onPress={onEditPress} style={styles.editIcon}>
-          <Feather name="edit" size={24} color="#757575"/>
+          <Feather name="edit" size={24} color={secondaryTextColor}/>
         </TouchableOpacity>
       </View>
       <Divider />
@@ -74,12 +77,10 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 16,
-    color: '#FFFFFF',
     fontWeight: 'bold',
   },
   email: {
     fontSize: 14,
-    color: '#999999',
     marginTop: 4,
   },
   editIcon: {

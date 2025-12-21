@@ -202,6 +202,56 @@ namespace TeamUp.Api.Migrations
                     b.ToTable("refresh_tokens");
                 });
 
+            modelBuilder.Entity("TeamUp.Api.Models.DeviceToken", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("device_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("platform");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("token");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("device_tokens");
+                });
+
             modelBuilder.Entity("TeamUp.Api.Models.User", b =>
                 {
                     b.Property<string>("Id")
@@ -434,6 +484,17 @@ namespace TeamUp.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("TeamUp.Api.Models.DeviceToken", b =>
+                {
+                    b.HasOne("TeamUp.Api.Models.User", "User")
+                        .WithMany("DeviceTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("TeamUp.Api.Models.UserPresence", b =>
                 {
                     b.HasOne("TeamUp.Api.Models.User", "User")
@@ -455,6 +516,8 @@ namespace TeamUp.Api.Migrations
             modelBuilder.Entity("TeamUp.Api.Models.User", b =>
                 {
                     b.Navigation("ConversationParticipants");
+
+                    b.Navigation("DeviceTokens");
 
                     b.Navigation("Presence");
 

@@ -1,5 +1,5 @@
 export declare const styles: {
-    container: {
+    backdrop: {
         backgroundColor: string;
         position: "absolute";
         left: 0;

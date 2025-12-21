@@ -6,6 +6,7 @@ using TeamUp.Api.Data;
 using TeamUp.Api.DTOs;
 using TeamUp.Api.Mappers;
 using TeamUp.Api.Models;
+using TeamUp.Api.Services;
 
 namespace TeamUp.Api.Controllers;
 
@@ -17,15 +18,18 @@ public class ProfileController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ProfileController> _logger;
     private readonly IWebHostEnvironment _environment;
+    private readonly ProfileStatsService _profileStatsService;
 
     public ProfileController(
         ApplicationDbContext context, 
         ILogger<ProfileController> logger,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        ProfileStatsService profileStatsService)
     {
         _context = context;
         _logger = logger;
         _environment = environment;
+        _profileStatsService = profileStatsService;
     }
 
     private string? GetCurrentUserId() => User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -127,6 +131,20 @@ public class ProfileController : ControllerBase
     }
 
     /// <summary>
+    /// Get current user's profile statistics
+    /// </summary>
+    [HttpGet("stats")]
+    public async Task<ActionResult<ProfileStatsResponse>> GetProfileStats()
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var stats = await _profileStatsService.GetStatsAsync(userId);
+        return Ok(stats);
+    }
+
+    /// <summary>
     /// Upload avatar image
     /// </summary>
     [HttpPost("avatar")]
@@ -141,7 +159,7 @@ public class ProfileController : ControllerBase
             return BadRequest(new { error = "No file uploaded" });
 
         // Validate file type
-        var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+        var allowedTypes = new[] { "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp" };
         if (!allowedTypes.Contains(file.ContentType.ToLower()))
             return BadRequest(new { error = "Invalid file type. Allowed: jpeg, png, gif, webp" });
 
@@ -193,9 +211,6 @@ public class ProfileController : ControllerBase
     }
 
 }
-
-
-
 
 
 

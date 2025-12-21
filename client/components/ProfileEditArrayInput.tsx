@@ -5,6 +5,7 @@ import ProfileEditInput from './ProfileEditInput';
 import ProfileEditArrayItem, { Item } from './ProfileEditArrayItem'
 import { Divider } from './ui/Divider';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 interface ProfileEditArrayInputProps {
   placeholder: string;
@@ -17,6 +18,7 @@ const ProfileEditArrayInput: React.FC<ProfileEditArrayInputProps> = ({
   arrayItems = [],
   onArrayItemsChange,
 }) => {
+  const secondaryTextColor = useThemeColor({}, 'secondaryText');
   const [newItemText, setNewItemText] = useState('');
   const initialData: Item[] = arrayItems.map((item, index) => ({ key: `${index}`, text: item }));
   const [data, setData] = useState<Item[]>(initialData);
@@ -65,7 +67,7 @@ const ProfileEditArrayInput: React.FC<ProfileEditArrayInputProps> = ({
       <View style={styles.inputArea}>
         <ProfileEditInput placeholder={placeholder} value={newItemText} onChangeText={setNewItemText} />
         <TouchableOpacity onPress={addItem} style={styles.iconContainer} >
-          <Ionicons name='add-circle-outline' size={28} color='#757575' style={styles.addIcon} />
+          <Ionicons name='add-circle-outline' size={28} color={secondaryTextColor} style={styles.addIcon} />
         </TouchableOpacity>
       </View>
       <Divider />

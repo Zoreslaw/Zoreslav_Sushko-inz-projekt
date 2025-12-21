@@ -42,7 +42,7 @@ public class MessageResponse
 
 public class SendMessageRequest
 {
-    public string Message { get; set; } = string.Empty;
+    public string? Message { get; set; }
     public string MessageType { get; set; } = "Text";
     public string? Url { get; set; }
 }
@@ -64,6 +64,7 @@ public class SetPresenceRequest
 {
     public bool IsOnline { get; set; }
 }
+
 
 
 

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { Divider } from './ui/Divider';
 import { ScaleDecorator } from 'react-native-draggable-flatlist';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 export interface Item {
   key: string;
@@ -20,17 +21,20 @@ const ProfileEditArrayItem: React.FC<ProfileEditArrayItemProps> = ({
   onDelete,
   drag,
 }) => {
+  const backgroundColor = useThemeColor({}, 'secondaryBackground');
+  const textColor = useThemeColor({}, 'text');
+  const secondaryTextColor = useThemeColor({}, 'secondaryText');
 
   return (
     <ScaleDecorator>
       <Divider />
-      <View style={styles.itemContainer} >
+      <View style={[styles.itemContainer, { backgroundColor }]} >
         <TouchableOpacity style={styles.textContainer}>
-          <Text style={styles.itemText}>{item.text}</Text>
+          <Text style={[styles.itemText, { color: textColor }]}>{item.text}</Text>
         </TouchableOpacity>
         <Pressable onPress={onDelete} style={styles.trashIconContainer} >
           {({ pressed }) => (
-            <Ionicons name='trash-outline' size={20} color={pressed ? 'red' : '#757575'} style={styles.trashIcon} />
+            <Ionicons name='trash-outline' size={20} color={pressed ? 'red' : secondaryTextColor} style={styles.trashIcon} />
           )}
         </Pressable>
       </View>
@@ -45,7 +49,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 21,
     width: '100%',
-    backgroundColor: '#000000',
     paddingHorizontal: 10,
     marginVertical: 5,
     borderRadius: 5,
@@ -60,7 +63,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Roboto',
     fontSize: 15,
     fontWeight: '400',
-    color: '#FFFFFF',
   },
   trashIconContainer: {
 

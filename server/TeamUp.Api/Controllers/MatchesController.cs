@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,19 +20,22 @@ public class MatchesController : ControllerBase
     private readonly MLServiceClient _mlServiceClient;
     private readonly CBServiceClient _cbServiceClient;
     private readonly AlgorithmService _algorithmService;
+    private readonly PushNotificationService _pushNotificationService;
 
     public MatchesController(
         ApplicationDbContext context,
         ILogger<MatchesController> logger,
         MLServiceClient mlServiceClient,
         CBServiceClient cbServiceClient,
-        AlgorithmService algorithmService)
+        AlgorithmService algorithmService,
+        PushNotificationService pushNotificationService)
     {
         _context = context;
         _logger = logger;
         _mlServiceClient = mlServiceClient;
         _cbServiceClient = cbServiceClient;
         _algorithmService = algorithmService;
+        _pushNotificationService = pushNotificationService;
     }
 
     private string? GetCurrentUserId() => User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -315,6 +319,19 @@ public class MatchesController : ControllerBase
 
         _logger.LogInformation("User {UserId} liked {TargetUserId}, Match: {IsMatch}", userId, request.TargetUserId, isMatch);
 
+        if (isMatch)
+        {
+            await _pushNotificationService.SendToUserAsync(
+                request.TargetUserId,
+                "It's a match!",
+                $"You matched with {currentUser.DisplayName}",
+                new Dictionary<string, string>
+                {
+                    { "conversationId", conversationId ?? string.Empty },
+                    { "matchedUserId", userId }
+                });
+        }
+
         return Ok(new SwipeActionResponse
         {
             Success = true,
@@ -372,6 +389,7 @@ public class MatchesController : ControllerBase
         });
     }
 }
+
 
 
 

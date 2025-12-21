@@ -7,14 +7,18 @@ import {
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
   useColorScheme,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Divider } from '@/components/ui/Divider';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import * as ImagePicker from 'expo-image-picker';
+import { api } from '@/services/api';
 
 interface ConversationInputProps {
-  onSend?: (text: string) => void;
+  onSend?: (text: string, messageType?: string, url?: string) => void;
 }
 
 export default function ConversationInput({ onSend }: ConversationInputProps) {
@@ -22,6 +26,7 @@ export default function ConversationInput({ onSend }: ConversationInputProps) {
   const [inputValue, setInputValue] = useState('');
   const [inputHeight, setInputHeight] = useState(40);
   const [showBlur, setShowBlur] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const backgroundColor = useThemeColor({}, 'background');
   const secondaryBackgroundColor = useThemeColor({}, 'secondaryBackground');
@@ -34,6 +39,35 @@ export default function ConversationInput({ onSend }: ConversationInputProps) {
     onSend?.(trimmed);
     setInputValue('');
   }, [inputValue, onSend]);
+
+  const handleAttachPress = useCallback(async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow photo access to share images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const image = result.assets[0];
+      if (!image?.uri) return;
+
+      setIsUploading(true);
+      const upload = await api.uploadMessageMedia(image.uri);
+      onSend?.('', 'Image', upload.url);
+    } catch (error) {
+      console.error('Media upload failed:', error);
+      Alert.alert('Upload failed', 'Unable to upload image. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [onSend]);
 
   const handleContentSizeChange = useCallback(
     (e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
@@ -51,8 +85,12 @@ export default function ConversationInput({ onSend }: ConversationInputProps) {
     <View>
       <Divider />
       <View style={[styles.container, { backgroundColor }]}>
-        <TouchableOpacity style={styles.iconContainer}>
-          <Ionicons name="attach" size={24} color="#ADB5BD" />
+        <TouchableOpacity style={styles.iconContainer} onPress={handleAttachPress} disabled={isUploading}>
+          {isUploading ? (
+            <ActivityIndicator size="small" color="#ADB5BD" />
+          ) : (
+            <Ionicons name="attach" size={24} color="#ADB5BD" />
+          )}
         </TouchableOpacity>
 
         <View

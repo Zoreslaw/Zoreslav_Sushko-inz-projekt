@@ -11,6 +11,14 @@ import UIKit
 
 public extension UITextInput {
   var canSelectionFitIntoLayout: Bool {
+    if let selfObj = self as? NSObject,
+       let delegate = selfObj.safeValue(forKey: "textInputDelegate") as? NSObject,
+       let comingFromJS = delegate.safeValue(forKey: "_comingFromJS") as? Bool,
+       comingFromJS
+    {
+      return false
+    }
+
     guard let selectedRange = selectedTextRange else { return false }
 
     guard let range = textRange(from: selectedRange.start, to: selectedRange.end) else { return false }

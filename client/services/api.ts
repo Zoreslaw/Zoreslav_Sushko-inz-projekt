@@ -104,6 +104,16 @@ export interface UserPresence {
   lastSeenAt: string;
 }
 
+export interface ProfileStats {
+  matches: number;
+  messagesSent: number;
+  messagesReceived: number;
+  conversationsStarted: number;
+  likesGiven: number;
+  likesReceived: number;
+  lastActiveAt?: string;
+}
+
 class ApiClient {
   private baseUrl: string;
   private accessToken: string | null = null;
@@ -311,6 +321,10 @@ class ApiClient {
     return this.request<UserProfile>('/api/profile');
   }
 
+  async getProfileStats(): Promise<ProfileStats> {
+    return this.request<ProfileStats>('/api/profile/stats');
+  }
+
   async getUserProfile(userId: string): Promise<UserProfile> {
     return this.request<UserProfile>(`/api/profile/${userId}`);
   }
@@ -323,8 +337,77 @@ class ApiClient {
   }
 
   async uploadAvatar(uri: string): Promise<{ photoUrl: string }> {
+    console.log('Uploading avatar from URI:', uri);
+    
     const formData = new FormData();
-    const filename = uri.split('/').pop() || 'avatar.jpg';
+    
+    // Extract filename from URI (handle file:// and content:// URIs)
+    let filename = 'avatar.jpg';
+    if (uri.includes('/')) {
+      const parts = uri.split('/');
+      const lastPart = parts[parts.length - 1];
+      // Remove query parameters if any
+      const cleanPart = lastPart.split('?')[0];
+      if (cleanPart && cleanPart.includes('.')) {
+        filename = cleanPart;
+      }
+    }
+    
+    // Determine MIME type from extension
+    const extension = filename.split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeTypes: { [key: string]: string } = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+    };
+    const type = mimeTypes[extension] || 'image/jpeg';
+    
+    // Ensure filename has proper extension
+    if (!filename.includes('.')) {
+      filename = `avatar.${extension === 'jpg' ? 'jpg' : extension}`;
+    }
+
+    console.log('Uploading avatar with:', { filename, type, uri });
+
+    // React Native FormData format
+    formData.append('file', {
+      uri,
+      name: filename,
+      type,
+    } as any);
+
+    const response = await fetch(`${this.baseUrl}/api/profile/avatar`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        // Don't set Content-Type - let React Native set it with boundary
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Avatar upload failed:', response.status, errorText);
+      let errorMessage = 'Failed to upload avatar';
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorJson.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+
+    const result = await response.json();
+    console.log('Avatar upload successful:', result);
+    return result;
+  }
+
+  async uploadMessageMedia(uri: string): Promise<{ url: string }> {
+    const formData = new FormData();
+    const filename = uri.split('/').pop() || 'message.jpg';
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : 'image/jpeg';
 
@@ -334,7 +417,7 @@ class ApiClient {
       type,
     } as any);
 
-    const response = await fetch(`${this.baseUrl}/api/profile/avatar`, {
+    const response = await fetch(`${this.baseUrl}/api/media/messages`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -462,6 +545,22 @@ class ApiClient {
 
   async heartbeat(): Promise<void> {
     await this.request('/api/presence/heartbeat', { method: 'POST' });
+  }
+
+  // ============ NOTIFICATIONS ENDPOINTS ============
+
+  async registerDeviceToken(token: string, platform: string, deviceId?: string): Promise<void> {
+    await this.request('/api/notifications/devices', {
+      method: 'POST',
+      body: JSON.stringify({ token, platform, deviceId }),
+    });
+  }
+
+  async unregisterDeviceToken(token: string): Promise<void> {
+    await this.request('/api/notifications/devices/unregister', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
   }
 }
 

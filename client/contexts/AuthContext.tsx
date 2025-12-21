@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { useSegments } from 'expo-router';
 import { Alert, AppState, AppStateStatus } from 'react-native';
 import { api, AuthUser } from '@/services/api';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 type AuthContextType = {
   user: AuthUser | null;
@@ -30,6 +31,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const segments = useSegments();
+  const { unregisterPushToken } = usePushNotifications(Boolean(user));
 
   // Heartbeat interval ref
   const heartbeatInterval = React.useRef<NodeJS.Timeout | null>(null);
@@ -179,6 +181,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Set offline before logout
       await api.setPresence(false).catch(console.error);
+
+      // Unregister push token before auth is cleared
+      await unregisterPushToken().catch(console.error);
       
       // Logout from backend
       await api.logout();

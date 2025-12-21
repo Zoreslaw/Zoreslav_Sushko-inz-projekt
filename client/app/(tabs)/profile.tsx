@@ -9,6 +9,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import ProfileBar from '@/components/ProfileBar';
+import ProfileStatsCard from '@/components/ProfileStatsCard';
 import ProfileMenuItem from '@/components/ProfileMenuItem';
 import ProfileSubmenuItem from '@/components/ProfileSubmenuItem';
 import ProfileAnimatedSubmenu from '@/components/ProfileAnimatedSubmenu';
@@ -18,6 +19,7 @@ import ProfileEditMultiSelector from '@/components/ProfileEditMultiSelector';
 import ProfileEditSearchableSelector from '@/components/ProfileEditSearchableSelector';
 import ProfileEditBottomSheet, { ProfileEditSheetRef } from '@/components/ProfileEditBottomSheet';
 import languageMapEn, { reverseLanguageMapEn } from '@/localization/languageMaps';
+import { useProfileStats } from '@/hooks/useProfileStats';
 
 
 export default function Profile() {
@@ -26,6 +28,7 @@ export default function Profile() {
   const secondaryText = useThemeColor({}, 'secondaryText');
   const { user, signOut } = useAuth();
   const { profile, loading, updateProfile, refresh } = useProfile();
+  const { stats, loading: statsLoading } = useProfileStats();
   const router = useRouter();
   const [isBioPressed, setIsBioPressed] = useState(false);
   const [isPreferencesPressed, setIsPreferencesPressed] = useState(false);
@@ -549,6 +552,7 @@ export default function Profile() {
       <View style={styles.profileContainer}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <ProfileBar avatarUrl={profile?.avatarUrl || ''} name={profile?.userName || ''} email={user?.email || ''} onAvatarPress={handlePhotoSource} onEditPress={handleNameEdit} />
+          <ProfileStatsCard stats={stats} loading={statsLoading} />
           <ProfileMenuItem title="Bio" iconName="user" isPressed={isBioPressed} onPress={handleBio} />
 
           <ProfileAnimatedSubmenu isExpanded={isBioPressed}>

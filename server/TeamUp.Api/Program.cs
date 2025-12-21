@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.FileProviders;
 using TeamUp.Api.Data;
 using TeamUp.Api.Services;
 
@@ -108,12 +109,19 @@ builder.Services.AddHttpClient<SteamService>(client =>
     client.Timeout = TimeSpan.FromSeconds(20);
 });
 
+builder.Services.AddHttpClient<PushNotificationService>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["ExpoPush:BaseUrl"] ?? "https://exp.host/--/api/v2/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 // Services
 builder.Services.AddSingleton<AlgorithmService>();
 builder.Services.AddScoped<MetricsService>();
 builder.Services.AddScoped<CsvImportService>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<ProfileStatsService>();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -148,6 +156,14 @@ app.UseCors("AllowAll");
 
 // Serve static files (for avatar uploads)
 app.UseStaticFiles();
+
+var uploadsPath = Path.Combine(app.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
 
 // Authentication & Authorization
 app.UseAuthentication();

@@ -17,7 +17,7 @@ interface UseMessagesResult {
   messages: Message[];
   loading: boolean;
   error: string | null;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, messageType?: string, url?: string) => Promise<void>;
   markAsRead: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -90,11 +90,11 @@ export function useMessages(conversationId: string): UseMessagesResult {
   }, [messages, user, conversationId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, messageType = 'Text', url?: string) => {
       if (!user || !conversationId) return;
 
       try {
-        const newMessage = await api.sendMessage(conversationId, text);
+        const newMessage = await api.sendMessage(conversationId, text, messageType, url);
 
         // Add the new message to the list
         setMessages((prev) => [

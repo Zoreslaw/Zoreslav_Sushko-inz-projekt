@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 // Import our separate FloatingEmojisAroundCard component
 import { FloatingEmojisAroundCard } from './FloatingEmojisAroundCard';
 import AvatarPlaceholder from '@/components/AvatarPlaceholder';
+import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 interface MatchOverlayProps {
   visible: boolean;
@@ -80,7 +81,7 @@ export default function MatchOverlay({
           <View style={styles.photoContainer}>
             {matchedUser.photoURL && matchedUser.photoURL.trim() !== '' ? (
               <Image
-                source={{ uri: matchedUser.photoURL }}
+                source={{ uri: resolveMediaUrl(matchedUser.photoURL) }}
                 style={styles.userPhoto}
               />
             ) : (

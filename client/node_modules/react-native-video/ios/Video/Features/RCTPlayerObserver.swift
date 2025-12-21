@@ -31,6 +31,10 @@ protocol RCTPlayerObserverHandler: RCTPlayerObserverHandlerObjc {
     func handlePictureInPictureEnter()
     func handlePictureInPictureExit()
     func handleRestoreUserInterfaceForPictureInPictureStop()
+    func handleWillEnterFullScreen()
+    func handleDidEnterFullScreen()
+    func handleWillExitFullScreen()
+    func handleDidExitFullScreen()
 }
 
 // MARK: - RCTPlayerObserver
@@ -321,6 +325,37 @@ class RCTPlayerObserver: NSObject, AVPlayerItemMetadataOutputPushDelegate, AVPla
 
         _restoreUserInterfaceForPIPStopCompletionHandler = completionHandler
     }
+
+    #if !os(tvOS)
+        func playerViewController(
+            _: AVPlayerViewController,
+            willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            self._handlers?.handleWillEnterFullScreen()
+            coordinator.animate(alongsideTransition: nil) { [weak self] context in
+                guard let self, !context.isCancelled else { return }
+                self._handlers?.handleDidEnterFullScreen()
+            }
+        }
+
+        func playerViewController(
+            _: AVPlayerViewController,
+            willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            self._handlers?.handleWillExitFullScreen()
+            // iOS automatically pauses videos after exiting fullscreen,
+            // but it's better if we resume playback
+            let wasPlaying = player?.timeControlStatus == .playing
+
+            coordinator.animate(alongsideTransition: nil) { [weak self] context in
+                guard let self, !context.isCancelled else { return }
+                self._handlers?.handleDidExitFullScreen()
+                if wasPlaying == true {
+                    self.player?.play()
+                }
+            }
+        }
+    #endif
 
     func setRestoreUserInterfaceForPIPStopCompletionHandler(_ restore: Bool) {
         guard let _restoreUserInterfaceForPIPStopCompletionHandler else { return }

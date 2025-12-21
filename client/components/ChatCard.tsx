@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import DefaultAvatarIcon from './svgs/DefaultAvatarIcon';
+import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 interface ChatCardProps {
   name: string;
@@ -31,7 +32,7 @@ export default function ChatCard({
             {/* Avatar Section */}
             <View style={styles.avatarContainer}>
                 {avatarUrl && avatarUrl.trim() !== '' ? (
-                    <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                    <Image source={{ uri: resolveMediaUrl(avatarUrl) }} style={styles.avatarImage} />
                 ) : (
                     <DefaultAvatarIcon
                         width={56}

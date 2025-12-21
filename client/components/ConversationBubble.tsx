@@ -1,15 +1,17 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import CheckIcon from '@/components/svgs/CheckIcon';
+import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 interface ConversationBubbleProps {
   text: string;
   isMine: boolean;
   timestamp: number;
-  type?: 'Text' | 'File';
+  type?: 'Text' | 'File' | 'Image';
   fileName?: string;
   fileSize?: string;
   status: 'Sent' | 'Read';
+  url?: string;
 }
 
 export default function ConversationBubble({
@@ -20,6 +22,7 @@ export default function ConversationBubble({
   fileName,
   fileSize,
   status,
+  url,
 }: ConversationBubbleProps) {
   const bubbleStyle = isMine ? styles.myBubble : styles.otherBubble;
 
@@ -37,6 +40,33 @@ export default function ConversationBubble({
             <CheckIcon
               style={styles.statusIcon}
               fill={status === 'Read' ? '#7B00FF' : '#999999'}
+              width={14}
+              height={12}
+            />
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  if (type === 'Image' && url) {
+    const imageUrl = resolveMediaUrl(url);
+
+    return (
+      <View style={[styles.bubbleContainer, isMine && styles.myBubbleContainer]}>
+        <View style={[styles.bubble, bubbleStyle, styles.imageBubble]}>
+          {imageUrl && (
+            <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
+          )}
+          {!!text && (
+            <Text style={[styles.messageText, isMine ? { color: '#F7F7F7' } : { color: '#272727' }]}>
+              {text}
+            </Text>
+          )}
+          {isMine && (
+            <CheckIcon
+              style={styles.statusIcon}
+              fill={status === 'Read' ? 'rgb(85, 0, 255)' : '#F7F7F7'}
               width={14}
               height={12}
             />
@@ -123,5 +153,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
   },
+  imageBubble: {
+    paddingVertical: 10,
+  },
+  image: {
+    width: 220,
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
 });
-

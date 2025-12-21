@@ -11,6 +11,7 @@ import { AppState, AppStateStatus } from "react-native";
 import { AuthProvider } from "@/contexts/AuthContext";
 import useAppTheme from "@/hooks/useAppTheme";
 import { useAppLanguage } from "@/hooks/useAppLanguage";
+import NotificationListener from "@/components/NotificationListener";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -64,6 +65,7 @@ export default function RootLayout() {
         <BottomSheetModalProvider>
         <AuthProvider>
           <ThemeProvider value={DefaultTheme}>
+          <NotificationListener />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="(authentication)" />

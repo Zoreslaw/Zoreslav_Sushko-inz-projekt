@@ -25,9 +25,9 @@ export default function ConversationScreen() {
   }, [markAsRead, conversationId]);
 
   const handleSend = useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-      sendMessage(text);
+    (text: string, messageType = 'Text', url?: string) => {
+      if (messageType === 'Text' && !text.trim()) return;
+      sendMessage(text, messageType, url);
     },
     [sendMessage]
   );

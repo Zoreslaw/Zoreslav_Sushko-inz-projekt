@@ -46,8 +46,9 @@ export default function MessageGroup({ group, myUserId }: MessageGroupProps) {
           text={msg.message}
           isMine={isMine}
           timestamp={msg.timestamp}
-          type={msg.messageType as 'Text' | 'File'}
+          type={msg.messageType as 'Text' | 'File' | 'Image'}
           status={msg.status as 'Sent' | 'Read'}
+          url={msg.url}
           // fileName={msg.fileName}
           // fileSize={msg.fileSize}
         />

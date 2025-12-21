@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using TeamUp.Api.Data;
 using TeamUp.Api.DTOs;
 using TeamUp.Api.Models;
+using TeamUp.Api.Services;
 
 namespace TeamUp.Api.Controllers;
 
@@ -15,11 +17,16 @@ public class ConversationsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<ConversationsController> _logger;
+    private readonly PushNotificationService _pushNotificationService;
 
-    public ConversationsController(ApplicationDbContext context, ILogger<ConversationsController> logger)
+    public ConversationsController(
+        ApplicationDbContext context,
+        ILogger<ConversationsController> logger,
+        PushNotificationService pushNotificationService)
     {
         _context = context;
         _logger = logger;
+        _pushNotificationService = pushNotificationService;
     }
 
     private string? GetCurrentUserId() => User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -272,8 +279,13 @@ public class ConversationsController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        if (string.IsNullOrWhiteSpace(request.Message))
+        var messageType = string.IsNullOrWhiteSpace(request.MessageType) ? "Text" : request.MessageType;
+        var isImageMessage = messageType.Equals("Image", StringComparison.OrdinalIgnoreCase);
+        if (!isImageMessage && string.IsNullOrWhiteSpace(request.Message))
             return BadRequest(new { error = "Message cannot be empty" });
+
+        if (isImageMessage && string.IsNullOrWhiteSpace(request.Url))
+            return BadRequest(new { error = "Image message requires a url" });
 
         // Verify user is a participant and get other participant
         var participants = await _context.ConversationParticipants
@@ -288,13 +300,14 @@ public class ConversationsController : ControllerBase
         if (otherParticipant == null)
             return BadRequest(new { error = "No other participant in conversation" });
 
+        var messageText = request.Message ?? string.Empty;
         var message = new Message
         {
             ConversationId = id,
             SenderId = userId,
             RecipientId = otherParticipant.UserId,
-            MessageText = request.Message,
-            MessageType = request.MessageType,
+            MessageText = messageText,
+            MessageType = messageType,
             Status = "Sent",
             Timestamp = DateTime.UtcNow,
             Url = request.Url
@@ -306,9 +319,10 @@ public class ConversationsController : ControllerBase
         var conversation = await _context.Conversations.FindAsync(id);
         if (conversation != null)
         {
-            conversation.LastMessageText = request.Message.Length > 500 
-                ? request.Message.Substring(0, 500) 
-                : request.Message;
+            var previewText = isImageMessage ? "Photo" : messageText;
+            conversation.LastMessageText = previewText.Length > 500
+                ? previewText.Substring(0, 500)
+                : previewText;
             conversation.LastMessageSenderId = userId;
             conversation.LastMessageTimestamp = message.Timestamp;
             conversation.LastUpdatedAt = message.Timestamp;
@@ -317,6 +331,16 @@ public class ConversationsController : ControllerBase
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Message sent in conversation {ConversationId} by {UserId}", id, userId);
+
+        await _pushNotificationService.SendToUserAsync(
+            otherParticipant.UserId,
+            "New message",
+            isImageMessage ? "Sent you a photo" : messageText,
+            new Dictionary<string, string>
+            {
+                { "conversationId", id },
+                { "senderId", userId }
+            });
 
         return CreatedAtAction(nameof(GetMessages), new { id }, new MessageResponse
         {
@@ -378,6 +402,7 @@ public class ConversationsController : ControllerBase
         return Ok(new { marked_read = messages.Count });
     }
 }
+
 
 
 

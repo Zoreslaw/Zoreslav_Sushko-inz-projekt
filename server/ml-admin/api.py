@@ -714,6 +714,20 @@ def delete_user(user_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 503
 
+@app.post('/api/users/<user_id>/update')
+def update_user(user_id):
+    """Proxy to backend API to update a user."""
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/{user_id}/update',
+            json=data,
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
 @app.post('/api/users/<user_id>/interactions')
 def update_user_interactions(user_id):
     """Proxy to backend API to update user interactions."""

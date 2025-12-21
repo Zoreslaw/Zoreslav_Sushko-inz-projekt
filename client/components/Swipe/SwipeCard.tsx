@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   ImageBackground,
   StyleSheet,
   TouchableOpacity,
@@ -13,6 +14,7 @@ import ModalRN from 'react-native-modal';
 // Import MaterialCommunityIcons
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AvatarPlaceholder from '@/components/AvatarPlaceholder';
+import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 interface SwipeCardProps {
   card: {
@@ -31,20 +33,29 @@ const { width } = Dimensions.get('window');
 
 export default function SwipeCard({ card, overlay, style }: SwipeCardProps) {
   const [showBio, setShowBio] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   if (!card?.user) {
     return <View />;
   }
 
-  const hasValidPhoto = card.user.photoURL && card.user.photoURL.trim() !== '';
+  const photoUrl = resolveMediaUrl(card.user.photoURL);
+  const hasValidPhoto = photoUrl && !imageError;
 
   return (
     <>
       {/* Main card container */}
       <View style={[styles.cardContainer, style]}>
         {hasValidPhoto ? (
+          <>
+            {/* Test image loading with hidden Image to detect errors */}
+            <Image
+              source={{ uri: photoUrl }}
+              style={{ width: 1, height: 1, position: 'absolute', opacity: 0 }}
+              onError={() => setImageError(true)}
+            />
           <ImageBackground
-            source={{ uri: card.user.photoURL }}
+            source={{ uri: photoUrl }}
             style={styles.cardImage}
             imageStyle={styles.cardImageStyle}
           >
@@ -87,6 +98,7 @@ export default function SwipeCard({ card, overlay, style }: SwipeCardProps) {
             </Text>
           </View>
         </ImageBackground>
+          </>
         ) : (
           <View style={styles.cardImage}>
             <View style={styles.placeholderContainer}>

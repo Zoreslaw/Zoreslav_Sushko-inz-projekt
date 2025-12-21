@@ -273,7 +273,7 @@ def train_model_v6_extreme(
     for epoch in range(1, epochs + 1):
         # Check for stop flag
         if os.path.exists(stop_training_file):
-            log_fn("⚠️ Stop training flag detected. Stopping training...")
+            log_fn("Stop training flag detected. Stopping training...")
             try:
                 os.remove(stop_training_file)
             except Exception:
@@ -290,7 +290,7 @@ def train_model_v6_extreme(
         for u_idx, v_pos_idx, v_neg_idx in dl:
             # Check for stop flag during batch processing
             if os.path.exists(stop_training_file):
-                log_fn("⚠️ Stop training flag detected. Stopping training...")
+                log_fn("Stop training flag detected. Stopping training...")
                 try:
                     os.remove(stop_training_file)
                 except Exception:
@@ -344,7 +344,7 @@ def train_model_v6_extreme(
         
         # Check stop flag after epoch
         if os.path.exists(stop_training_file):
-            log_fn("⚠️ Stop training flag detected. Stopping training...")
+            log_fn("Stop training flag detected. Stopping training...")
             try:
                 os.remove(stop_training_file)
             except Exception:
@@ -368,5 +368,4 @@ def train_model_v6_extreme(
     
     model.eval()
     return model
-
 

@@ -19,6 +19,25 @@ public class CreateUserRequest
     public List<string>? PreferenceLanguages { get; set; }
 }
 
+public class UpdateUserRequest
+{
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+    public int? Age { get; set; }
+    public string? Gender { get; set; }
+    public string? Description { get; set; }
+    public string? PhotoUrl { get; set; }
+    public string? FavoriteCategory { get; set; }
+    public string? PreferenceGender { get; set; }
+    public int? PreferenceAgeMin { get; set; }
+    public int? PreferenceAgeMax { get; set; }
+    public List<string>? FavoriteGames { get; set; }
+    public List<string>? OtherGames { get; set; }
+    public List<string>? Languages { get; set; }
+    public List<string>? PreferenceCategories { get; set; }
+    public List<string>? PreferenceLanguages { get; set; }
+}
+
 public class UpdateInteractionsRequest
 {
     public List<string> LikedIds { get; set; } = new();

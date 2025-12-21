@@ -61,6 +61,17 @@ type UserRecord = {
   gender?: string;
   description?: string;
   photoUrl?: string;
+  authProvider?: string;
+  providerId?: string;
+  favoriteCategory?: string;
+  preferenceGender?: string;
+  preferenceAgeMin?: number;
+  preferenceAgeMax?: number;
+  favoriteGames?: string[];
+  otherGames?: string[];
+  languages?: string[];
+  preferenceCategories?: string[];
+  preferenceLanguages?: string[];
   steamId?: string;
   steamDisplayName?: string;
   steamProfileUrl?: string;
@@ -83,6 +94,19 @@ const parseList = (value: string) =>
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+
+const normalizeStringList = (values?: string[]) =>
+  (values ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
+const areStringListsEqual = (left?: string[], right?: string[]) => {
+  const normalizedLeft = normalizeStringList(left);
+  const normalizedRight = normalizeStringList(right);
+  if (normalizedLeft.length !== normalizedRight.length) return false;
+  return normalizedLeft.every((value, index) => value === normalizedRight[index]);
+};
 
 const toTimestamp = (value?: string) => {
   if (!value) return null;
@@ -229,6 +253,28 @@ export const UserManagement: React.FC = () => {
   const [activeSegment, setActiveSegment] = useState<SegmentId>('all');
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
   const [contextMessage, setContextMessage] = useState<string | null>(null);
+  const [profileTab, setProfileTab] = useState(0);
+
+  const [profileForm, setProfileForm] = useState({
+    displayName: '',
+    email: '',
+    age: 18,
+    gender: '',
+    description: '',
+    photoUrl: '',
+    favoriteCategory: '',
+    preferenceGender: '',
+    preferenceAgeMin: 18,
+    preferenceAgeMax: 35,
+    favoriteGames: [] as string[],
+    otherGames: [] as string[],
+    languages: [] as string[],
+    preferenceCategories: [] as string[],
+    preferenceLanguages: [] as string[],
+  });
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const [createForm, setCreateForm] = useState({
     displayName: '',
@@ -269,6 +315,11 @@ export const UserManagement: React.FC = () => {
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
     [selectedUserId, users]
+  );
+  const sharedGames = useMemo(() => normalizeStringList(selectedUser?.steamGames), [selectedUser]);
+  const sharedCategories = useMemo(
+    () => normalizeStringList(selectedUser?.steamCategories),
+    [selectedUser]
   );
 
   const aggregates = useMemo(() => {
@@ -478,6 +529,34 @@ export const UserManagement: React.FC = () => {
     setDislikedUsers(disliked);
   }, [selectedUser, users]);
 
+  useEffect(() => {
+    if (!selectedUser) return;
+    setProfileForm({
+      displayName: selectedUser.displayName ?? '',
+      email: selectedUser.email ?? '',
+      age: selectedUser.age ?? 18,
+      gender: selectedUser.gender ?? 'Unknown',
+      description: selectedUser.description ?? '',
+      photoUrl: selectedUser.photoUrl ?? '',
+      favoriteCategory: selectedUser.favoriteCategory ?? '',
+      preferenceGender: selectedUser.preferenceGender ?? 'Any',
+      preferenceAgeMin: selectedUser.preferenceAgeMin ?? 18,
+      preferenceAgeMax: selectedUser.preferenceAgeMax ?? 35,
+      favoriteGames: normalizeStringList(selectedUser.favoriteGames),
+      otherGames: normalizeStringList(selectedUser.otherGames),
+      languages: normalizeStringList(selectedUser.languages),
+      preferenceCategories: normalizeStringList(selectedUser.preferenceCategories),
+      preferenceLanguages: normalizeStringList(selectedUser.preferenceLanguages),
+    });
+    setProfileError(null);
+  }, [selectedUser]);
+
+  useEffect(() => {
+    setProfileMessage(null);
+    setProfileError(null);
+    setProfileTab(0);
+  }, [selectedUserId]);
+
   const handleCreateUser = async () => {
     try {
       setCreateLoading(true);
@@ -637,8 +716,127 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const profileDirty = useMemo(() => {
+    if (!selectedUser) return false;
+    return (
+      profileForm.displayName.trim() !== (selectedUser.displayName ?? '') ||
+      profileForm.email.trim() !== (selectedUser.email ?? '') ||
+      profileForm.age !== (selectedUser.age ?? 18) ||
+      profileForm.gender.trim() !== (selectedUser.gender ?? 'Unknown') ||
+      profileForm.description.trim() !== (selectedUser.description ?? '') ||
+      profileForm.photoUrl.trim() !== (selectedUser.photoUrl ?? '') ||
+      profileForm.favoriteCategory.trim() !== (selectedUser.favoriteCategory ?? '') ||
+      profileForm.preferenceGender.trim() !== (selectedUser.preferenceGender ?? 'Any') ||
+      profileForm.preferenceAgeMin !== (selectedUser.preferenceAgeMin ?? 18) ||
+      profileForm.preferenceAgeMax !== (selectedUser.preferenceAgeMax ?? 35) ||
+      !areStringListsEqual(profileForm.favoriteGames, selectedUser.favoriteGames) ||
+      !areStringListsEqual(profileForm.otherGames, selectedUser.otherGames) ||
+      !areStringListsEqual(profileForm.languages, selectedUser.languages) ||
+      !areStringListsEqual(profileForm.preferenceCategories, selectedUser.preferenceCategories) ||
+      !areStringListsEqual(profileForm.preferenceLanguages, selectedUser.preferenceLanguages)
+    );
+  }, [profileForm, selectedUser]);
+
+  const handleProfileSave = async () => {
+    if (!selectedUser) return;
+    try {
+      setProfileLoading(true);
+      setProfileError(null);
+      const sharedGamesSet = new Set(sharedGames.map((game) => game.toLowerCase()));
+      const sharedCategoriesSet = new Set(sharedCategories.map((category) => category.toLowerCase()));
+      const favoriteGames = normalizeStringList(profileForm.favoriteGames).filter(
+        (game) => !hasSharedGames || sharedGamesSet.has(game.toLowerCase())
+      );
+      const otherGames = normalizeStringList(profileForm.otherGames).filter(
+        (game) => !hasSharedGames || sharedGamesSet.has(game.toLowerCase())
+      );
+      const preferenceCategories = normalizeStringList(profileForm.preferenceCategories).filter(
+        (category) => !hasSharedCategories || sharedCategoriesSet.has(category.toLowerCase())
+      );
+      const favoriteCategory = profileForm.favoriteCategory.trim();
+      const safeFavoriteCategory =
+        !hasSharedCategories || !favoriteCategory
+          ? favoriteCategory
+          : sharedCategoriesSet.has(favoriteCategory.toLowerCase())
+          ? favoriteCategory
+          : '';
+      const payload = {
+        displayName: profileForm.displayName.trim(),
+        email: profileForm.email.trim(),
+        age: Number.isFinite(profileForm.age) ? profileForm.age : undefined,
+        gender: profileForm.gender.trim(),
+        description: profileForm.description.trim(),
+        photoUrl: profileForm.photoUrl.trim(),
+        favoriteCategory: safeFavoriteCategory,
+        preferenceGender: profileForm.preferenceGender.trim(),
+        preferenceAgeMin: Number.isFinite(profileForm.preferenceAgeMin)
+          ? profileForm.preferenceAgeMin
+          : undefined,
+        preferenceAgeMax: Number.isFinite(profileForm.preferenceAgeMax)
+          ? profileForm.preferenceAgeMax
+          : undefined,
+        favoriteGames,
+        otherGames,
+        languages: normalizeStringList(profileForm.languages),
+        preferenceCategories,
+        preferenceLanguages: normalizeStringList(profileForm.preferenceLanguages),
+      };
+      await mlAdminApi.updateUser(selectedUser.id, payload);
+      setProfileMessage('Profile updated');
+      await loadUsers();
+    } catch (err: any) {
+      setProfileError(err?.message ?? 'Failed to update profile');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleProfileReset = () => {
+    if (!selectedUser) return;
+    setProfileForm({
+      displayName: selectedUser.displayName ?? '',
+      email: selectedUser.email ?? '',
+      age: selectedUser.age ?? 18,
+      gender: selectedUser.gender ?? 'Unknown',
+      description: selectedUser.description ?? '',
+      photoUrl: selectedUser.photoUrl ?? '',
+      favoriteCategory: selectedUser.favoriteCategory ?? '',
+      preferenceGender: selectedUser.preferenceGender ?? 'Any',
+      preferenceAgeMin: selectedUser.preferenceAgeMin ?? 18,
+      preferenceAgeMax: selectedUser.preferenceAgeMax ?? 35,
+      favoriteGames: normalizeStringList(selectedUser.favoriteGames),
+      otherGames: normalizeStringList(selectedUser.otherGames),
+      languages: normalizeStringList(selectedUser.languages),
+      preferenceCategories: normalizeStringList(selectedUser.preferenceCategories),
+      preferenceLanguages: normalizeStringList(selectedUser.preferenceLanguages),
+    });
+  };
+
   const interactionTotal = likedUsers.length + dislikedUsers.length;
   const likeShare = interactionTotal ? Math.round((likedUsers.length / interactionTotal) * 100) : 0;
+  const renderChips = (items: string[] | undefined, emptyLabel = 'n/a') => {
+    const normalized = normalizeStringList(items);
+    if (!normalized.length) {
+      return (
+        <Typography variant="caption" color="text.secondary">
+          {emptyLabel}
+        </Typography>
+      );
+    }
+    return (
+      <Stack direction="row" spacing={1} flexWrap="wrap">
+        {normalized.map((item) => (
+          <Chip key={item} label={item} size="small" variant="outlined" />
+        ))}
+      </Stack>
+    );
+  };
+  const hasSharedGames = sharedGames.length > 0;
+  const hasSharedCategories = sharedCategories.length > 0;
+  const languageOptions = useMemo(
+    () => normalizeStringList([...(profileForm.languages ?? []), ...(profileForm.preferenceLanguages ?? [])]),
+    [profileForm.languages, profileForm.preferenceLanguages]
+  );
 
   return (
     <Grid container spacing={3}>
@@ -659,8 +857,8 @@ export const UserManagement: React.FC = () => {
             }
           />
           <CardContent>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 7 }}>
+            <Grid container spacing={2} alignItems="stretch">
+              <Grid size={{ xs: 12, lg: 8 }}>
                 <Grid container spacing={2}>
                   {pulseCards.map((card, index) => (
                     <Grid key={card.id} size={{ xs: 12, sm: 6 }}>
@@ -671,6 +869,7 @@ export const UserManagement: React.FC = () => {
                             borderRadius: 2,
                             border: '1px solid',
                             borderColor: 'divider',
+                            height: '100%',
                             background: (theme) =>
                               `linear-gradient(140deg, ${alpha(
                                 theme.palette.primary.main,
@@ -720,72 +919,95 @@ export const UserManagement: React.FC = () => {
                   ))}
                 </Grid>
               </Grid>
-              <Grid size={{ xs: 12, md: 5 }}>
-                <Stack spacing={2}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Predictive insights
-                  </Typography>
-                  {insights.filter((item) => item.count > 0).length === 0 && (
-                    <Paper sx={{ p: 2, borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
-                      <Stack spacing={1}>
-                        <Typography variant="subtitle2">All clear</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          No anomalies detected in the current user population.
-                        </Typography>
-                      </Stack>
-                    </Paper>
-                  )}
-                  {insights
-                    .filter((item) => item.count > 0)
-                    .map((insight) => (
+              <Grid size={{ xs: 12, lg: 4 }}>
+                <Paper
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    height: '100%',
+                  }}
+                >
+                  <Stack spacing={2}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Avatar sx={{ bgcolor: alpha('#1b4dff', 0.12), color: '#1b4dff' }}>
+                        <AutoAwesome fontSize="small" />
+                      </Avatar>
+                      <Typography variant="subtitle2">Predictive insights</Typography>
+                    </Stack>
+                    {insights.filter((item) => item.count > 0).length === 0 && (
                       <Paper
-                        key={insight.id}
                         sx={{
                           p: 2,
                           borderRadius: 2,
-                          border: '1px solid',
+                          border: '1px dashed',
                           borderColor: 'divider',
-                          background: (theme) => {
-                            const tone =
-                              insight.tone === 'success'
-                                ? theme.palette.success.main
-                                : insight.tone === 'warning'
-                                ? theme.palette.warning.main
-                                : theme.palette.primary.main;
-                            return `linear-gradient(140deg, ${alpha(tone, 0.12)}, ${alpha(tone, 0.04)})`;
-                          },
                         }}
                       >
                         <Stack spacing={1}>
-                          <Stack direction="row" spacing={1.5} alignItems="center">
-                            <Avatar
-                              sx={{
-                                bgcolor: (theme) => alpha(theme.palette.common.white, 0.6),
-                                color: 'text.primary',
-                                width: 36,
-                                height: 36,
-                              }}
-                            >
-                              {insight.icon}
-                            </Avatar>
-                            <Box>
-                              <Typography variant="subtitle2">{insight.title}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {insight.detail}
-                              </Typography>
-                            </Box>
-                          </Stack>
-                          <Button
-                            size="small"
-                            variant="text"
-                            onClick={() => setActiveSegment(insight.segment)}
-                          >
-                            Focus list
-                          </Button>
+                          <Typography variant="subtitle2">All clear</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            No anomalies detected in the current user population.
+                          </Typography>
                         </Stack>
                       </Paper>
-                    ))}
-                </Stack>
+                    )}
+                    {insights
+                      .filter((item) => item.count > 0)
+                      .map((insight) => (
+                        <Paper
+                          key={insight.id}
+                          sx={{
+                            p: 2,
+                            borderRadius: 2,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            background: (theme) => {
+                              const tone =
+                                insight.tone === 'success'
+                                  ? theme.palette.success.main
+                                  : insight.tone === 'warning'
+                                  ? theme.palette.warning.main
+                                  : theme.palette.primary.main;
+                              return `linear-gradient(140deg, ${alpha(
+                                tone,
+                                0.12
+                              )}, ${alpha(tone, 0.04)})`;
+                            },
+                          }}
+                        >
+                          <Stack spacing={1}>
+                            <Stack direction="row" spacing={1.5} alignItems="center">
+                              <Avatar
+                                sx={{
+                                  bgcolor: (theme) => alpha(theme.palette.common.white, 0.6),
+                                  color: 'text.primary',
+                                  width: 36,
+                                  height: 36,
+                                }}
+                              >
+                                {insight.icon}
+                              </Avatar>
+                              <Box>
+                                <Typography variant="subtitle2">{insight.title}</Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {insight.detail}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                            <Button
+                              size="small"
+                              variant="text"
+                              onClick={() => setActiveSegment(insight.segment)}
+                            >
+                              Focus list
+                            </Button>
+                          </Stack>
+                        </Paper>
+                      ))}
+                  </Stack>
+                </Paper>
               </Grid>
             </Grid>
           </CardContent>
@@ -898,37 +1120,48 @@ export const UserManagement: React.FC = () => {
                 <Alert severity="info">Select a user to see profile intelligence.</Alert>
               ) : (
                 <Stack spacing={2}>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Avatar
-                      src={selectedUser.photoUrl || selectedUser.steamAvatarUrl || undefined}
-                      sx={{ width: 72, height: 72 }}
-                    >
-                      {selectedUser.displayName?.[0] || 'U'}
-                    </Avatar>
-                    <Box>
-                      <Typography variant="h6">{selectedUser.displayName}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {selectedUser.email}
-                      </Typography>
-                      <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
-                        <Chip label={`Age ${selectedUser.age ?? 'n/a'}`} size="small" />
-                        <Chip label={selectedUser.gender || 'Unknown'} size="small" />
-                        <Chip label={`${selectedSignals.interactions} interactions`} size="small" />
-                        <Chip
-                          label={`Risk ${selectedSignals.riskLabel}`}
-                          size="small"
-                          color={
-                            selectedSignals.riskLabel === 'High'
-                              ? 'error'
-                              : selectedSignals.riskLabel === 'Medium'
-                              ? 'warning'
-                              : 'success'
-                          }
-                        />
-                        {selectedSignals.isNew && <Chip label="New" size="small" color="info" />}
+                  <Tabs
+                    value={profileTab}
+                    onChange={(_, value) => setProfileTab(value)}
+                    sx={{ mb: 1 }}
+                  >
+                    <Tab label="Insights" />
+                    <Tab label="Edit profile" />
+                  </Tabs>
+
+                  {profileTab === 0 && (
+                    <Stack spacing={2}>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Avatar
+                          src={selectedUser.photoUrl || selectedUser.steamAvatarUrl || undefined}
+                          sx={{ width: 72, height: 72 }}
+                        >
+                          {selectedUser.displayName?.[0] || 'U'}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="h6">{selectedUser.displayName}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedUser.email}
+                          </Typography>
+                          <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
+                            <Chip label={`Age ${selectedUser.age ?? 'n/a'}`} size="small" />
+                            <Chip label={selectedUser.gender || 'Unknown'} size="small" />
+                            <Chip label={`${selectedSignals.interactions} interactions`} size="small" />
+                            <Chip
+                              label={`Risk ${selectedSignals.riskLabel}`}
+                              size="small"
+                              color={
+                                selectedSignals.riskLabel === 'High'
+                                  ? 'error'
+                                  : selectedSignals.riskLabel === 'Medium'
+                                  ? 'warning'
+                                  : 'success'
+                              }
+                            />
+                            {selectedSignals.isNew && <Chip label="New" size="small" color="info" />}
+                          </Stack>
+                        </Box>
                       </Stack>
-                    </Box>
-                  </Stack>
                   <Paper
                     sx={{
                       p: 2,
@@ -995,30 +1228,132 @@ export const UserManagement: React.FC = () => {
 
                   <Grid container spacing={2}>
                     <Grid size={{ xs: 12, md: 6 }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Identity and recency
-                      </Typography>
-                      <Stack spacing={1} mt={1}>
-                        <Typography variant="body2">
-                          Created: {formatDateTime(selectedUser.createdAt)}
-                        </Typography>
-                        <Typography variant="body2">
-                          Updated: {formatDateTime(selectedUser.updatedAt)}
-                        </Typography>
-                      </Stack>
+                      <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">Profile details</Typography>
+                          <Typography variant="body2">User ID: {selectedUser.id}</Typography>
+                          <Typography variant="body2">
+                            Description: {selectedUser.description || 'n/a'}
+                          </Typography>
+                          <Typography variant="body2">
+                            Favorite category: {selectedUser.favoriteCategory || 'n/a'}
+                          </Typography>
+                          <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                            Photo URL: {selectedUser.photoUrl || 'n/a'}
+                          </Typography>
+                          <Typography variant="body2">Languages</Typography>
+                          {renderChips(selectedUser.languages, 'No languages')}
+                        </Stack>
+                      </Paper>
                     </Grid>
                     <Grid size={{ xs: 12, md: 6 }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Steam signals
-                      </Typography>
-                      <Stack spacing={1} mt={1}>
-                        <Typography variant="body2">
-                          {selectedUser.steamDisplayName || 'Not connected'}
-                        </Typography>
-                        <Typography variant="body2">
-                          Last sync: {formatDateTime(selectedUser.steamLastSyncedAt)}
-                        </Typography>
-                      </Stack>
+                      <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">Preferences</Typography>
+                          <Typography variant="body2">
+                            Preference gender: {selectedUser.preferenceGender || 'Any'}
+                          </Typography>
+                          <Typography variant="body2">
+                            Preferred age range:{' '}
+                            {selectedUser.preferenceAgeMin ?? 'n/a'} - {selectedUser.preferenceAgeMax ?? 'n/a'}
+                          </Typography>
+                          <Typography variant="body2">Preference categories</Typography>
+                          {renderChips(selectedUser.preferenceCategories, 'No categories')}
+                          <Typography variant="body2">Preference languages</Typography>
+                          {renderChips(selectedUser.preferenceLanguages, 'No preference languages')}
+                        </Stack>
+                      </Paper>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">Games</Typography>
+                          <Typography variant="body2">Favorite games</Typography>
+                          {renderChips(selectedUser.favoriteGames, 'No favorites')}
+                          <Typography variant="body2">Other games</Typography>
+                          {renderChips(selectedUser.otherGames, 'No other games')}
+                        </Stack>
+                      </Paper>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle2">System data</Typography>
+                          <Typography variant="body2">
+                            Auth provider: {selectedUser.authProvider || 'n/a'}
+                          </Typography>
+                          <Typography variant="body2">
+                            Provider ID: {selectedUser.providerId || 'n/a'}
+                          </Typography>
+                          <Typography variant="body2">
+                            Created: {formatDateTime(selectedUser.createdAt)}
+                          </Typography>
+                          <Typography variant="body2">
+                            Updated: {formatDateTime(selectedUser.updatedAt)}
+                          </Typography>
+                          <Typography variant="body2">
+                            Likes: {selectedUser.liked?.length ?? 0} | Dislikes:{' '}
+                            {selectedUser.disliked?.length ?? 0}
+                          </Typography>
+                        </Stack>
+                      </Paper>
+                    </Grid>
+                    <Grid size={{ xs: 12 }}>
+                      <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Stack spacing={2}>
+                          <Typography variant="subtitle2">Steam profile</Typography>
+                          <Grid container spacing={2}>
+                            <Grid size={{ xs: 12, md: 6 }}>
+                              <Stack spacing={1}>
+                                <Typography variant="body2">
+                                  Steam ID: {selectedUser.steamId || 'n/a'}
+                                </Typography>
+                                <Typography variant="body2">
+                                  Display name: {selectedUser.steamDisplayName || 'n/a'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                                  Profile URL: {selectedUser.steamProfileUrl || 'n/a'}
+                                </Typography>
+                                <Typography variant="body2">
+                                  Last sync: {formatDateTime(selectedUser.steamLastSyncedAt)}
+                                </Typography>
+                              </Stack>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 6 }}>
+                              <Stack spacing={1}>
+                                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                                  Steam avatar: {selectedUser.steamAvatarUrl || 'n/a'}
+                                </Typography>
+                                <Typography variant="body2">
+                                  Shared games: {selectedUser.steamGames?.length ?? 0}
+                                </Typography>
+                                <Typography variant="body2">
+                                  Shared categories: {selectedUser.steamCategories?.length ?? 0}
+                                </Typography>
+                              </Stack>
+                            </Grid>
+                          </Grid>
+                          <Divider />
+                          <Grid container spacing={2}>
+                            <Grid size={{ xs: 12, md: 6 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Steam games
+                              </Typography>
+                              <Box sx={{ maxHeight: 140, overflowY: 'auto' }}>
+                                {renderChips(selectedUser.steamGames, 'No shared games')}
+                              </Box>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 6 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Steam categories
+                              </Typography>
+                              <Box sx={{ maxHeight: 140, overflowY: 'auto' }}>
+                                {renderChips(selectedUser.steamCategories, 'No shared categories')}
+                              </Box>
+                            </Grid>
+                          </Grid>
+                        </Stack>
+                      </Paper>
                     </Grid>
                   </Grid>
 
@@ -1125,6 +1460,302 @@ export const UserManagement: React.FC = () => {
                     {interactionMessage && <Alert severity="success">{interactionMessage}</Alert>}
                     {interactionError && <Alert severity="error">{interactionError}</Alert>}
                   </Stack>
+                    </Stack>
+                  )}
+                  {profileTab === 1 && (
+                    <Stack spacing={2}>
+                      <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Stack spacing={2}>
+                          <Typography variant="subtitle2">Avatar controls</Typography>
+                          <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={2}
+                            alignItems={{ xs: 'flex-start', sm: 'center' }}
+                          >
+                            <Avatar
+                              src={profileForm.photoUrl || selectedUser.steamAvatarUrl || undefined}
+                              sx={{ width: 64, height: 64 }}
+                            >
+                              {selectedUser.displayName?.[0] || 'U'}
+                            </Avatar>
+                            <Stack spacing={1} sx={{ width: '100%' }}>
+                              <TextField
+                                label="Photo URL"
+                                value={profileForm.photoUrl}
+                                onChange={(event) =>
+                                  setProfileForm({ ...profileForm, photoUrl: event.target.value })
+                                }
+                                fullWidth
+                              />
+                              <Stack direction="row" spacing={1} flexWrap="wrap">
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<SportsEsports />}
+                                  disabled={!selectedUser.steamAvatarUrl}
+                                  onClick={() =>
+                                    setProfileForm({
+                                      ...profileForm,
+                                      photoUrl: selectedUser.steamAvatarUrl ?? '',
+                                    })
+                                  }
+                                >
+                                  Use Steam avatar
+                                </Button>
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  variant="text"
+                                  onClick={() => setProfileForm({ ...profileForm, photoUrl: '' })}
+                                >
+                                  Clear avatar
+                                </Button>
+                              </Stack>
+                            </Stack>
+                          </Stack>
+                        </Stack>
+                      </Paper>
+
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <TextField
+                            label="Display Name"
+                            value={profileForm.displayName}
+                            onChange={(event) =>
+                              setProfileForm({ ...profileForm, displayName: event.target.value })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <TextField
+                            label="Email"
+                            value={profileForm.email}
+                            onChange={(event) =>
+                              setProfileForm({ ...profileForm, email: event.target.value })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 4 }}>
+                          <TextField
+                            label="Age"
+                            type="number"
+                            value={profileForm.age}
+                            onChange={(event) =>
+                              setProfileForm({ ...profileForm, age: Number(event.target.value) })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 4 }}>
+                          <TextField
+                            label="Gender"
+                            value={profileForm.gender}
+                            onChange={(event) =>
+                              setProfileForm({ ...profileForm, gender: event.target.value })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 4 }}>
+                          <TextField
+                            label="Preference Gender"
+                            value={profileForm.preferenceGender}
+                            onChange={(event) =>
+                              setProfileForm({ ...profileForm, preferenceGender: event.target.value })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <TextField
+                            label="Preference Age Min"
+                            type="number"
+                            value={profileForm.preferenceAgeMin}
+                            onChange={(event) =>
+                              setProfileForm({
+                                ...profileForm,
+                                preferenceAgeMin: Number(event.target.value),
+                              })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <TextField
+                            label="Preference Age Max"
+                            type="number"
+                            value={profileForm.preferenceAgeMax}
+                            onChange={(event) =>
+                              setProfileForm({
+                                ...profileForm,
+                                preferenceAgeMax: Number(event.target.value),
+                              })
+                            }
+                            fullWidth
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12 }}>
+                          <TextField
+                            label="Description"
+                            value={profileForm.description}
+                            onChange={(event) =>
+                              setProfileForm({ ...profileForm, description: event.target.value })
+                            }
+                            fullWidth
+                            multiline
+                            minRows={3}
+                          />
+                        </Grid>
+                      </Grid>
+
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Autocomplete
+                            options={sharedCategories}
+                            value={profileForm.favoriteCategory || null}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, favoriteCategory: value ?? '' })
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Favorite category"
+                                helperText={
+                                  hasSharedCategories
+                                    ? 'Choose from Steam shared categories'
+                                    : 'No Steam categories available'
+                                }
+                              />
+                            )}
+                            noOptionsText="No shared categories"
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Autocomplete
+                            multiple
+                            options={sharedCategories}
+                            value={profileForm.preferenceCategories}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, preferenceCategories: value })
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Preference categories"
+                                helperText={
+                                  hasSharedCategories
+                                    ? 'Choose from Steam shared categories'
+                                    : 'No Steam categories available'
+                                }
+                              />
+                            )}
+                            noOptionsText="No shared categories"
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Autocomplete
+                            multiple
+                            options={sharedGames}
+                            value={profileForm.favoriteGames}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, favoriteGames: value })
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Favorite games"
+                                helperText={
+                                  hasSharedGames
+                                    ? 'Choose from Steam shared games'
+                                    : 'No Steam games available'
+                                }
+                              />
+                            )}
+                            noOptionsText="No shared games"
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Autocomplete
+                            multiple
+                            options={sharedGames}
+                            value={profileForm.otherGames}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, otherGames: value })
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Other games"
+                                helperText={
+                                  hasSharedGames
+                                    ? 'Choose from Steam shared games'
+                                    : 'No Steam games available'
+                                }
+                              />
+                            )}
+                            noOptionsText="No shared games"
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Autocomplete
+                            multiple
+                            freeSolo
+                            options={languageOptions}
+                            value={profileForm.languages}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, languages: value })
+                            }
+                            renderInput={(params) => (
+                              <TextField {...params} label="Languages" helperText="Press enter to add" />
+                            )}
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Autocomplete
+                            multiple
+                            freeSolo
+                            options={languageOptions}
+                            value={profileForm.preferenceLanguages}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, preferenceLanguages: value })
+                            }
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Preference languages"
+                                helperText="Press enter to add"
+                              />
+                            )}
+                          />
+                        </Grid>
+                      </Grid>
+
+                      <Divider />
+
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        <Button
+                          variant="contained"
+                          startIcon={<AutoFixHigh />}
+                          onClick={handleProfileSave}
+                          disabled={!profileDirty || profileLoading}
+                        >
+                          {profileLoading ? 'Saving...' : 'Save changes'}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={handleProfileReset}
+                          disabled={!profileDirty || profileLoading}
+                        >
+                          Reset
+                        </Button>
+                      </Stack>
+
+                      {profileMessage && <Alert severity="success">{profileMessage}</Alert>}
+                      {profileError && <Alert severity="error">{profileError}</Alert>}
+                    </Stack>
+                  )}
                 </Stack>
               )}
             </CardContent>

@@ -29,6 +29,7 @@ LOG_PATH = os.getenv('LOG_PATH', '/shared/logs/training.log')
 CURRENT_TRAINING_LOG = os.getenv('CURRENT_TRAINING_LOG', '/shared/logs/current_training.log')
 NEXT_TRAINING_FILE = os.getenv('NEXT_TRAINING_FILE', '/shared/logs/next_training.json')
 TRIGGER_FILE = os.getenv('TRIGGER_FILE', '/shared/logs/trigger_training.flag')
+STOP_TRAINING_FILE = os.getenv('STOP_TRAINING_FILE', '/shared/logs/stop_training.flag')
 ML_SERVICE_URL = os.getenv('ML_SERVICE_URL', 'http://ml-service:5000')
 CB_SERVICE_URL = os.getenv('CB_SERVICE_URL', 'http://cb-service:5001')
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://backend:8080')
@@ -39,6 +40,7 @@ REDIS_CURRENT_KEY = os.getenv('REDIS_CURRENT_KEY', 'training_stream_current')
 
 SSE_HEARTBEAT_SECONDS = int(os.getenv('SSE_HEARTBEAT_SECONDS', '10'))
 SSE_BLOCK_MS = int(os.getenv('SSE_BLOCK_MS', '1000'))  # XREAD block ms
+TRAINING_ACTIVE_WINDOW_SECONDS = int(os.getenv('TRAINING_ACTIVE_WINDOW_SECONDS', '300'))
 
 CURRENT_MODEL_VERSION_FILE = os.getenv(
     'CURRENT_MODEL_VERSION_FILE',
@@ -216,6 +218,43 @@ def _recently_modified(path: str, seconds: int = 30) -> bool:
     except Exception:
         return False
 
+def _get_latest_stream_key(client: Optional[redis.Redis]) -> Optional[str]:
+    if not client:
+        return None
+    try:
+        current = client.get(REDIS_CURRENT_KEY)
+        if current:
+            return current
+        latest = None
+        prefix = f"{REDIS_CHANNEL}:"
+        for key in client.scan_iter(match=f"{prefix}*"):
+            if not latest or key > latest:
+                latest = key
+        return latest
+    except Exception:
+        return None
+
+def _get_stream_last_message(client: Optional[redis.Redis], stream_key: Optional[str]) -> Optional[str]:
+    if not client or not stream_key:
+        return None
+    try:
+        entries = client.xrevrange(stream_key, max='+', min='-', count=1)
+        if not entries:
+            return None
+        _, data = entries[0]
+        return data.get('message')
+    except Exception:
+        return None
+
+def _find_last(entries: list, predicate) -> Optional[dict]:
+    for entry in reversed(entries):
+        try:
+            if predicate(entry):
+                return entry
+        except Exception:
+            continue
+    return None
+
 # -----------------------------------
 # Routes
 # -----------------------------------
@@ -273,26 +312,54 @@ def get_training_status():
     """
     Training considered 'active' if:
     - train_from_db.py process is running OR
-    - CURRENT_TRAINING_LOG modified in last 30s,
+    - CURRENT_TRAINING_LOG modified recently,
     and not explicitly marked completed in the file.
     """
     try:
-        is_training = _process_running('train_from_db.py') or _recently_modified(CURRENT_TRAINING_LOG, 30)
-        last_training = None
-        logs = _tail_json_lines(LOG_PATH, 1)
-        if logs:
-            last_training = logs[0]
+        log_entries = _read_json_lines(LOG_PATH)
+        last_training = log_entries[-1] if log_entries else None
+        last_success = _find_last(log_entries, lambda e: e.get('status') == 'success')
+        last_error = _find_last(log_entries, lambda e: e.get('status') == 'error')
+
+        is_training = _process_running('train_from_db.py') or _recently_modified(
+            CURRENT_TRAINING_LOG,
+            TRAINING_ACTIVE_WINDOW_SECONDS
+        )
+        if _file_exists(TRIGGER_FILE):
+            is_training = True
+
+        stream_key = _get_latest_stream_key(redis_client)
+        last_stream_message = _get_stream_last_message(redis_client, stream_key)
+        if last_stream_message:
+            if last_stream_message == '[TRAINING_COMPLETED]':
+                is_training = False
+            else:
+                is_training = True
 
         # If the current log contains completion/skip, treat as idle.
         if _file_exists(CURRENT_TRAINING_LOG):
             try:
                 txt = Path(CURRENT_TRAINING_LOG).read_text()
-                if 'TRAINING COMPLETED' in txt or 'Training skipped' in txt:
+                if (
+                    'TRAINING COMPLETED' in txt
+                    or 'Training skipped' in txt
+                    or 'Skipping training' in txt
+                    or 'Training result: SKIPPED' in txt
+                    or 'Training was stopped' in txt
+                ):
                     is_training = False
             except Exception:
                 pass
 
-        return jsonify({'is_training': bool(is_training), 'last_training': last_training}), 200
+        stop_requested = _file_exists(STOP_TRAINING_FILE)
+
+        return jsonify({
+            'is_training': bool(is_training),
+            'last_training': last_training,
+            'last_success': last_success,
+            'last_error': last_error,
+            'stop_requested': bool(stop_requested),
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -325,11 +392,56 @@ def trigger_training():
             except Exception:
                 pass
 
+        # Clear any stale stop flag so a new run is not immediately cancelled.
+        if _file_exists(STOP_TRAINING_FILE):
+            try:
+                os.remove(STOP_TRAINING_FILE)
+            except Exception:
+                pass
+
         # Create trigger file (scheduler will remove it)
         with open(TRIGGER_FILE, 'w') as f:
             f.write(stream_id)
 
         return jsonify({'message': 'Training triggered successfully', 'timestamp': datetime.utcnow().isoformat()}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.post('/api/training/stop')
+def stop_training():
+    try:
+        is_training = _process_running('train_from_db.py') or _recently_modified(
+            CURRENT_TRAINING_LOG,
+            TRAINING_ACTIVE_WINDOW_SECONDS
+        )
+        if _file_exists(TRIGGER_FILE):
+            is_training = True
+
+        if not is_training:
+            if _file_exists(STOP_TRAINING_FILE):
+                try:
+                    os.remove(STOP_TRAINING_FILE)
+                except Exception:
+                    pass
+            return jsonify({'message': 'No active training to stop.'}), 200
+
+        os.makedirs(os.path.dirname(STOP_TRAINING_FILE), exist_ok=True)
+        with open(STOP_TRAINING_FILE, 'w') as f:
+            f.write(datetime.utcnow().isoformat())
+
+        if redis_client:
+            stream_key = _get_latest_stream_key(redis_client)
+            if stream_key:
+                try:
+                    redis_client.xadd(
+                        stream_key,
+                        {'message': 'Stop requested by admin UI.'},
+                        maxlen=500
+                    )
+                except Exception:
+                    pass
+
+        return jsonify({'message': 'Stop request submitted.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -346,7 +458,10 @@ def stream_training_logs():
             parts.append(f"event: {event}")
         if id_:
             parts.append(f"id: {id_}")
-        parts.append(f"data: {data}")
+        data = "" if data is None else str(data)
+        lines = data.splitlines() or [""]
+        for line in lines:
+            parts.append(f"data: {line}")
         return "\n".join(parts) + "\n\n"
 
     def generate() -> Generator[str, None, None]:
@@ -354,31 +469,40 @@ def stream_training_logs():
             yield sse("Redis unavailable", event="error")
             return
 
-        yield sse("Connected to training stream...")
-
-        stream_key = redis_client.get(REDIS_CURRENT_KEY) or REDIS_CHANNEL
-        last_id = request.headers.get('Last-Event-ID') or '0-0'
+        stream_key = _get_latest_stream_key(redis_client)
+        if stream_key:
+            yield sse("Connected to training stream.", event="status")
+        else:
+            yield sse("Waiting for training stream...", event="status")
+        last_id = request.headers.get('Last-Event-ID') or request.args.get('last_id') or '0-0'
         last_heartbeat = time.time()
 
         while True:
             try:
-                messages = redis_client.xread({stream_key: last_id}, count=50, block=SSE_BLOCK_MS)
-                if messages:
-                    _, stream_messages = messages[0]
-                    for msg_id, msg_data in stream_messages:
-                        last_id = msg_id
-                        line = msg_data.get('message', '')
-                        if line == '[TRAINING_COMPLETED]':
-                            yield sse("[TRAINING COMPLETED]", event="complete", id_=msg_id)
-                            return
-                        if line and line != '[TRAINING_START]':
-                            yield sse(line, id_=msg_id)
+                current_key = redis_client.get(REDIS_CURRENT_KEY)
+                if current_key and current_key != stream_key:
+                    stream_key = current_key
+                    last_id = '0-0'
+                    yield sse("Switched to latest training stream.", event="status")
+
+                if stream_key:
+                    messages = redis_client.xread({stream_key: last_id}, count=50, block=SSE_BLOCK_MS)
+                    if messages:
+                        _, stream_messages = messages[0]
+                        for msg_id, msg_data in stream_messages:
+                            last_id = msg_id
+                            line = msg_data.get('message', '')
+                            if line == '[TRAINING_COMPLETED]':
+                                yield sse("[TRAINING COMPLETED]", event="complete", id_=msg_id)
+                                return
+                            if line and line != '[TRAINING_START]':
+                                yield sse(line, id_=msg_id)
 
                 # Heartbeat
                 now = time.time()
                 if now - last_heartbeat > SSE_HEARTBEAT_SECONDS:
                     last_heartbeat = now
-                    yield sse("💓", event="heartbeat", id_=last_id)
+                    yield sse("ping", event="heartbeat", id_=last_id)
 
             except GeneratorExit:
                 return
@@ -404,9 +528,18 @@ def get_current_training_logs():
         with open(CURRENT_TRAINING_LOG, 'r') as f:
             lines = [ln.rstrip() for ln in f.readlines()]
 
-        is_training = _process_running('train_from_db.py') or _recently_modified(CURRENT_TRAINING_LOG, 30)
+        is_training = _process_running('train_from_db.py') or _recently_modified(
+            CURRENT_TRAINING_LOG,
+            TRAINING_ACTIVE_WINDOW_SECONDS
+        )
         text = "\n".join(lines)
-        if 'TRAINING COMPLETED' in text or 'Training skipped' in text:
+        if (
+            'TRAINING COMPLETED' in text
+            or 'Training skipped' in text
+            or 'Skipping training' in text
+            or 'Training result: SKIPPED' in text
+            or 'Training was stopped' in text
+        ):
             is_training = False
 
         return jsonify({'logs': lines, 'is_training': bool(is_training)}), 200

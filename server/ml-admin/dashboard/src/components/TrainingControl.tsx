@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, Typography, Box, Button, Chip, Alert, Skeleton, Stack, CircularProgress } from '@mui/material';
-import { PlayArrow, Stop, AutoMode, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
+import { PlayArrow, Stop, AutoMode, CheckCircle, Error as ErrorIcon, WarningAmber } from '@mui/icons-material';
 import { mlAdminApi, TrainingStatus } from '../api/mlAdminApi';
 import { TrainingConsole } from './TrainingConsole';
 import { NextTrainingProgress } from './NextTrainingProgress';
@@ -16,6 +16,26 @@ export const TrainingControl: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
   const prevIsTrainingRef = useRef<boolean>(false);
+
+  const statusChipFor = (value?: string | null) => {
+    const normalized = (value || '').toLowerCase();
+    if (normalized === 'success') {
+      return <Chip label="Success" color="success" size="small" />;
+    }
+    if (normalized === 'error') {
+      return <Chip icon={<ErrorIcon />} label="Error" color="error" size="small" />;
+    }
+    if (normalized === 'stopped') {
+      return <Chip icon={<Stop />} label="Stopped" color="warning" size="small" />;
+    }
+    if (normalized === 'skipped') {
+      return <Chip icon={<WarningAmber />} label="Skipped" color="warning" size="small" />;
+    }
+    if (!value) {
+      return <Chip label="Unknown" size="small" />;
+    }
+    return <Chip label={value} size="small" />;
+  };
   const fetchStatus = useCallback(async () => {
     try {
       const data = await mlAdminApi.getTrainingStatus();
@@ -70,6 +90,9 @@ export const TrainingControl: React.FC = () => {
     }
   };
 
+  const isStopping = !!status?.stop_requested && !!status?.is_training;
+  const lastRun = status?.last_training ?? status?.last_success ?? null;
+
   if (loading) {
     return (
       <Card>
@@ -90,7 +113,12 @@ export const TrainingControl: React.FC = () => {
         <Box display="flex" alignItems="center" mb={2}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>Training Control</Typography>
           {status?.is_training ? (
-            <Chip icon={<AutoMode />} label="Training in Progress" color="warning" size="small" />
+            <Chip
+              icon={isStopping ? <Stop /> : <AutoMode />}
+              label={isStopping ? 'Stop Requested' : 'Training in Progress'}
+              color={isStopping ? 'error' : 'warning'}
+              size="small"
+            />
           ) : (
             <Chip icon={<CheckCircle />} label="Idle" color="default" size="small" />
           )}
@@ -98,54 +126,32 @@ export const TrainingControl: React.FC = () => {
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
+        {isStopping && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Stop requested. Training will halt at the next checkpoint.
+          </Alert>
+        )}
 
-        {(status?.last_success || status?.last_training) && (
+        {lastRun && (
           <Box mb={2}>
-            <Typography variant="subtitle2" color="text.secondary">Last Successful Training:</Typography>
+            <Typography variant="subtitle2" color="text.secondary">Last Training Run:</Typography>
             <Box mt={1}>
-              {status.last_success ? (
-                <>
-                  <Typography variant="body2">
-                    <strong>Status:</strong> <Chip label="Success" color="success" size="small" />
-                  </Typography>
-                  {status.last_success.timestamp && (
-                    <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(status.last_success.timestamp).toLocaleString()}</Typography>
-                  )}
-                  {typeof status.last_success.num_users === 'number' && (
-                    <Typography variant="body2" mt={1}><strong>Users:</strong> {status.last_success.num_users}</Typography>
-                  )}
-                  {typeof status.last_success.num_interactions === 'number' && (
-                    <Typography variant="body2" mt={1}><strong>Interactions:</strong> {status.last_success.num_interactions}</Typography>
-                  )}
-                  {typeof status.last_success.duration_seconds === 'number' && (
-                    <Typography variant="body2" mt={1}><strong>Duration:</strong> {status.last_success.duration_seconds.toFixed(1)}s</Typography>
-                  )}
-                </>
-              ) : status.last_training ? (
-                <>
-                  <Typography variant="body2">
-                    <strong>Status:</strong>{' '}
-                    {status.last_training.status === 'success' ? (
-                      <Chip label="Success" color="success" size="small" />
-                    ) : (
-                      <Chip icon={<ErrorIcon />} label="Error" color="error" size="small" />
-                    )}
-                  </Typography>
-                  {status.last_training.timestamp && (
-                    <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(status.last_training.timestamp).toLocaleString()}</Typography>
-                  )}
-                  {typeof status.last_training.num_users === 'number' && (
-                    <Typography variant="body2" mt={1}><strong>Users:</strong> {status.last_training.num_users}</Typography>
-                  )}
-                  {typeof status.last_training.num_interactions === 'number' && (
-                    <Typography variant="body2" mt={1}><strong>Interactions:</strong> {status.last_training.num_interactions}</Typography>
-                  )}
-                  {typeof status.last_training.duration_seconds === 'number' && (
-                    <Typography variant="body2" mt={1}><strong>Duration:</strong> {status.last_training.duration_seconds.toFixed(1)}s</Typography>
-                  )}
-                  {status.last_training.error && <Alert severity="error" sx={{ mt: 1 }}>{status.last_training.error}</Alert>}
-                </>
-              ) : null}
+              <Typography variant="body2">
+                <strong>Status:</strong> {statusChipFor(lastRun.status)}
+              </Typography>
+              {lastRun.timestamp && (
+                <Typography variant="body2" mt={1}><strong>Time:</strong> {new Date(lastRun.timestamp).toLocaleString()}</Typography>
+              )}
+              {typeof lastRun.num_users === 'number' && (
+                <Typography variant="body2" mt={1}><strong>Users:</strong> {lastRun.num_users}</Typography>
+              )}
+              {typeof lastRun.num_interactions === 'number' && (
+                <Typography variant="body2" mt={1}><strong>Interactions:</strong> {lastRun.num_interactions}</Typography>
+              )}
+              {typeof lastRun.duration_seconds === 'number' && (
+                <Typography variant="body2" mt={1}><strong>Duration:</strong> {lastRun.duration_seconds.toFixed(1)}s</Typography>
+              )}
+              {lastRun.error && <Alert severity="error" sx={{ mt: 1 }}>{lastRun.error}</Alert>}
             </Box>
           </Box>
         )}
@@ -179,7 +185,7 @@ export const TrainingControl: React.FC = () => {
               color="error"
               startIcon={stopping ? <CircularProgress size={18} /> : <Stop />}
               onClick={handleStopTraining}
-              disabled={stopping}
+              disabled={stopping || isStopping}
               sx={{ flex: 1 }}
             >
               {stopping ? 'Stopping...' : 'Stop Training'}

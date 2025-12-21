@@ -79,6 +79,9 @@ export const OperationsOverview: React.FC = () => {
   }, [logs]);
 
   const isTraining = status?.is_training ?? logs?.is_training ?? false;
+  const stopRequested = !!status?.stop_requested;
+  const lastStatus = status?.last_training?.status;
+  const lastStatusIcon = lastStatus === 'success' ? <CheckCircle /> : <WarningAmber />;
 
   return (
     <Card>
@@ -113,15 +116,15 @@ export const OperationsOverview: React.FC = () => {
           <Stack spacing={2}>
             <Stack direction="row" spacing={1.5} alignItems="center">
               <Chip
-                icon={isTraining ? <AutoMode /> : <CheckCircle />}
-                label={isTraining ? 'Training Active' : 'Training Idle'}
-                color={isTraining ? 'warning' : 'success'}
+                icon={isTraining ? (stopRequested ? <WarningAmber /> : <AutoMode />) : <CheckCircle />}
+                label={isTraining ? (stopRequested ? 'Stop Requested' : 'Training Active') : 'Training Idle'}
+                color={isTraining ? (stopRequested ? 'error' : 'warning') : 'success'}
                 size="small"
               />
-              {status?.last_training?.status && (
+              {lastStatus && (
                 <Chip
-                  icon={status.last_training.status === 'success' ? <CheckCircle /> : <WarningAmber />}
-                  label={`Last run: ${status.last_training.status}`}
+                  icon={lastStatusIcon}
+                  label={`Last run: ${lastStatus}`}
                   size="small"
                   variant="outlined"
                 />

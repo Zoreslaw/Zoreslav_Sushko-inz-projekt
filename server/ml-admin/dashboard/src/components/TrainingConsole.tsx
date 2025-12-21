@@ -12,10 +12,26 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
   const [isTraining, setIsTraining] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isWaiting, setIsWaiting] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const lastIdRef = useRef<string | null>(null);
   const retryRef = useRef<number>(0);
+  const hasSeenLogsRef = useRef(false);
+
+  useEffect(() => {
+    let mounted = true;
+    mlAdminApi.getTrainingStatus()
+      .then((data) => {
+        if (mounted) {
+          setIsTraining(!!data?.is_training);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -29,17 +45,22 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
         const eventSource = mlAdminApi.streamTrainingLogsRaw(lastIdRef.current ?? undefined);
         esRef.current = eventSource;
 
+        eventSource.onopen = () => {
+          retryRef.current = 0;
+          if (mounted) {
+            setStatusMessage(null);
+          }
+        };
+
         eventSource.onmessage = (e) => {
           if (!mounted) return;
           lastIdRef.current = e.lastEventId || lastIdRef.current;
 
           const text = (e.data || '').trim();
           if (!text) return;
-
-          // heartbeat events are nice to keep connection alive
-          if (e.type === 'heartbeat' || text === '<3') return;
-
+          hasSeenLogsRef.current = true;
           setIsWaiting(false);
+          setStatusMessage(null);
 
           if (text === '[TRAINING COMPLETED]') {
             setIsTraining(false);
@@ -54,6 +75,22 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
           });
         };
 
+        eventSource.addEventListener('status', (evt) => {
+          if (!mounted) return;
+          const text = ((evt as MessageEvent).data || '').trim();
+          if (text) {
+            setStatusMessage(text);
+          }
+          setIsWaiting(false);
+        });
+
+        eventSource.addEventListener('heartbeat', () => {
+          if (!mounted) return;
+          if (!hasSeenLogsRef.current) {
+            setIsWaiting(false);
+          }
+        });
+
         eventSource.addEventListener('complete', () => {
           if (!mounted) return;
           setIsTraining(false);
@@ -63,6 +100,9 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
 
         eventSource.onerror = () => {
           if (!mounted) return;
+          if (!hasSeenLogsRef.current) {
+            setStatusMessage('Connection lost. Reconnecting...');
+          }
           try {
             eventSource.close();
           } catch {}
@@ -76,7 +116,7 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
     const cancel = attach();
 
     const spinnerTimeout = setTimeout(() => {
-      if (mounted && logs.length === 0) {
+      if (mounted && !hasSeenLogsRef.current) {
         setIsWaiting(false);
       }
     }, 15000);
@@ -87,7 +127,7 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
       cancel?.();
       if (esRef.current) esRef.current.close();
     };
-  }, [logs.length]);
+  }, []);
 
   return (
     <Card sx={{ mt: 2, border: '2px solid #90caf9' }}>
@@ -124,15 +164,21 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
               lineHeight: '1.5',
             }}
           >
-            {isWaiting && logs.length === 0 ? (
+            {logs.length === 0 ? (
               <Stack spacing={1} alignItems="center" py={3}>
-                <Skeleton variant="circular" width={40} height={40} />
+                {isWaiting && <Skeleton variant="circular" width={40} height={40} />}
                 <Typography sx={{ color: '#90caf9', fontSize: '14px' }}>
-                  {isTraining ? 'Starting training...' : 'Waiting for logs...'}
+                  {statusMessage
+                    ? statusMessage
+                    : isTraining
+                      ? (isWaiting ? 'Starting training...' : 'Waiting for training logs...')
+                      : 'No active training logs.'}
                 </Typography>
-                <Typography sx={{ color: '#666', fontSize: '12px', mt: 1 }}>
-                  This may take a few seconds
-                </Typography>
+                {isWaiting && (
+                  <Typography sx={{ color: '#666', fontSize: '12px', mt: 1 }}>
+                    This may take a few seconds
+                  </Typography>
+                )}
               </Stack>
             ) : (
               <>

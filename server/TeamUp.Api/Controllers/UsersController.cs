@@ -138,6 +138,133 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpPost("{id}/update")]
+    public async Task<ActionResult<User>> UpdateUser(string id, [FromBody] UpdateUserRequest request)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new { error = "User not found" });
+            }
+
+            if (request.DisplayName != null)
+            {
+                if (string.IsNullOrWhiteSpace(request.DisplayName))
+                {
+                    return BadRequest(new { error = "DisplayName cannot be empty." });
+                }
+                user.DisplayName = request.DisplayName.Trim();
+            }
+
+            if (request.Email != null)
+            {
+                if (string.IsNullOrWhiteSpace(request.Email))
+                {
+                    return BadRequest(new { error = "Email cannot be empty." });
+                }
+
+                var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+                if (!string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    var emailExists = await _context.Users.AnyAsync(u => u.Id != user.Id && u.Email.ToLower() == normalizedEmail);
+                    if (emailExists)
+                    {
+                        return Conflict(new { error = "Email already exists." });
+                    }
+                    user.Email = normalizedEmail;
+                }
+            }
+
+            if (request.Age.HasValue)
+            {
+                user.Age = Math.Clamp(request.Age.Value, 18, 100);
+            }
+
+            if (request.Gender != null)
+            {
+                user.Gender = string.IsNullOrWhiteSpace(request.Gender) ? "Unknown" : request.Gender.Trim();
+            }
+
+            if (request.Description != null)
+            {
+                user.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+            }
+
+            if (request.PhotoUrl != null)
+            {
+                user.PhotoUrl = string.IsNullOrWhiteSpace(request.PhotoUrl) ? null : request.PhotoUrl.Trim();
+            }
+
+            if (request.FavoriteCategory != null)
+            {
+                user.FavoriteCategory = string.IsNullOrWhiteSpace(request.FavoriteCategory)
+                    ? null
+                    : request.FavoriteCategory.Trim();
+            }
+
+            if (request.PreferenceGender != null)
+            {
+                user.PreferenceGender = string.IsNullOrWhiteSpace(request.PreferenceGender)
+                    ? null
+                    : request.PreferenceGender.Trim();
+            }
+
+            if (request.PreferenceAgeMin.HasValue)
+            {
+                user.PreferenceAgeMin = Math.Clamp(request.PreferenceAgeMin.Value, 18, 100);
+            }
+
+            if (request.PreferenceAgeMax.HasValue)
+            {
+                user.PreferenceAgeMax = Math.Clamp(request.PreferenceAgeMax.Value, 18, 100);
+            }
+
+            if (user.PreferenceAgeMin.HasValue &&
+                user.PreferenceAgeMax.HasValue &&
+                user.PreferenceAgeMin > user.PreferenceAgeMax)
+            {
+                return BadRequest(new { error = "PreferenceAgeMin cannot exceed PreferenceAgeMax." });
+            }
+
+            if (request.FavoriteGames != null)
+            {
+                user.FavoriteGames = NormalizeStringList(request.FavoriteGames);
+            }
+
+            if (request.OtherGames != null)
+            {
+                user.OtherGames = NormalizeStringList(request.OtherGames);
+            }
+
+            if (request.Languages != null)
+            {
+                user.Languages = NormalizeStringList(request.Languages);
+            }
+
+            if (request.PreferenceCategories != null)
+            {
+                user.PreferenceCategories = NormalizeStringList(request.PreferenceCategories);
+            }
+
+            if (request.PreferenceLanguages != null)
+            {
+                user.PreferenceLanguages = NormalizeStringList(request.PreferenceLanguages);
+            }
+
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating user {UserId}", id);
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
     [HttpDelete("{id}")]
     public async Task<ActionResult<object>> DeleteUser(string id)
     {
@@ -349,6 +476,20 @@ public class UsersController : ControllerBase
             .Select(id => id.Trim())
             .Where(id => string.IsNullOrWhiteSpace(selfId) || id != selfId)
             .Distinct()
+            .ToList();
+    }
+
+    private static List<string> NormalizeStringList(IEnumerable<string>? values)
+    {
+        if (values == null)
+        {
+            return new List<string>();
+        }
+
+        return values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

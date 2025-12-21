@@ -158,7 +158,7 @@ def run_training(trigger_source='scheduled') -> bool:
 
             attached_loggers = [root]
 
-            logger.info("Forwarding handler attached; streaming logs to Redis…")
+            logger.info("Forwarding handler attached; streaming logs to Redis...")
 
             ok = train_model()
             print(f"\n---\nTraining result: {'SUCCESS' if ok else 'SKIPPED'}")

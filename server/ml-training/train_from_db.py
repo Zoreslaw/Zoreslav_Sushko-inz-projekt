@@ -132,19 +132,40 @@ def train_model():
         logger.info("Loading data from PostgreSQL...")
         users = load_users_from_db()
         inter = load_interactions_from_db()
+        total_inter = len(inter.positives) + len(inter.negatives)
 
         # Explicit check for empty database
         if len(users) == 0:
             logger.warning("No users found in database. Skipping training.")
+            save_training_log({
+                'timestamp': start.isoformat(),
+                'status': 'skipped',
+                'reason': 'no_users',
+                'num_users': 0,
+                'num_interactions': total_inter
+            })
             return False
 
         if len(users) < TrainingConfig.MIN_USERS:
             logger.warning(f"Not enough users ({len(users)} < {TrainingConfig.MIN_USERS}). Skipping training.")
+            save_training_log({
+                'timestamp': start.isoformat(),
+                'status': 'skipped',
+                'reason': 'min_users',
+                'num_users': len(users),
+                'num_interactions': total_inter
+            })
             return False
 
-        total_inter = len(inter.positives) + len(inter.negatives)
         if total_inter < TrainingConfig.MIN_INTERACTIONS:
             logger.warning(f"Not enough interactions ({total_inter} < {TrainingConfig.MIN_INTERACTIONS}). Skipping training.")
+            save_training_log({
+                'timestamp': start.isoformat(),
+                'status': 'skipped',
+                'reason': 'min_interactions',
+                'num_users': len(users),
+                'num_interactions': total_inter
+            })
             return False
 
         logger.info("Building DataStore...")
@@ -179,6 +200,13 @@ def train_model():
                 os.remove(TrainingConfig.STOP_TRAINING_FILE)
             except Exception:
                 pass
+            save_training_log({
+                'timestamp': start.isoformat(),
+                'status': 'stopped',
+                'reason': 'pre_start',
+                'num_users': len(users),
+                'num_interactions': total_inter
+            })
             return False
 
         model = train_model_v6_extreme(
@@ -207,7 +235,7 @@ def train_model():
         # Check if training was stopped
         was_stopped = os.path.exists(TrainingConfig.STOP_TRAINING_FILE)
         if was_stopped:
-            logger.warning("⚠️ Training was stopped by user request")
+            logger.warning("Training was stopped by user request")
             try:
                 os.remove(TrainingConfig.STOP_TRAINING_FILE)
             except Exception:
@@ -253,7 +281,7 @@ def train_model():
         end = datetime.now()
         dur = (end - start).total_seconds()
         logger.info("=" * 60)
-        logger.info("✅ TRAINING COMPLETED SUCCESSFULLY!")
+        logger.info("TRAINING COMPLETED SUCCESSFULLY!")
         logger.info(f"Duration: {dur:.1f}s ({dur/60:.1f} minutes)")
         logger.info(f"Model saved: {model_path}")
         logger.info(f"Model size: {os.path.getsize(model_path) / (1024*1024):.2f} MB")

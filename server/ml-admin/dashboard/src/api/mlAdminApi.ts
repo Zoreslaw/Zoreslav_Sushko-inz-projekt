@@ -19,6 +19,7 @@ export type TrainingStatus = {
   last_training?: LastTrainingLog | null;
   last_success?: LastTrainingLog | null;
   last_error?: LastTrainingLog | null;
+  stop_requested?: boolean;
 };
 
 export type NextTrainingInfo = {
@@ -181,8 +182,9 @@ export const mlAdminApi = {
   // Raw SSE stream (UI layer wires onmessage/onerror etc.)
   // We keep the signature with an optional lastId to be future-proof,
   // but native EventSource does not accept headers; the browser handles resume.
-  streamTrainingLogsRaw(_lastId?: string): EventSource {
-    return toEventSource('/api/training/logs/stream');
+  streamTrainingLogsRaw(lastId?: string): EventSource {
+    const query = lastId ? `?last_id=${encodeURIComponent(lastId)}` : '';
+    return toEventSource(`/api/training/logs/stream${query}`);
   },
 
   // ---- Logs (optional helpers for non-stream views) ----
@@ -391,6 +393,10 @@ export const mlAdminApi = {
 
   async createRandomUsers(count: number): Promise<any> {
     return fetchJSON(`/api/users/random/bulk?count=${count}`, 'POST');
+  },
+
+  async updateUser(userId: string, payload: Record<string, any>): Promise<any> {
+    return fetchJSON(`/api/users/${userId}/update`, 'POST', payload);
   },
 
   async deleteUser(userId: string): Promise<any> {

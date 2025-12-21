@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import DefaultAvatarIcon from './svgs/DefaultAvatarIcon';
@@ -24,15 +25,29 @@ export default function ChatCard({
   hasStatus = false,
   statusColor = '#2CC069'
 }: ChatCardProps) {
+    const [imageError, setImageError] = useState(false);
     const backgroundColor = useThemeColor({}, "background");
     const textColor = useThemeColor({}, "text");
     const textColorSecondary = useThemeColor({}, "secondaryText");
+    
+    const resolvedUrl = avatarUrl ? resolveMediaUrl(avatarUrl) : undefined;
+    const hasValidAvatar = resolvedUrl && !imageError && avatarUrl && avatarUrl.trim() !== '';
+    
+    // Reset error state when avatarUrl changes
+    useEffect(() => {
+        setImageError(false);
+    }, [avatarUrl]);
+    
     return (
         <TouchableOpacity style={styles.container} onPress={onPress}>
             {/* Avatar Section */}
             <View style={styles.avatarContainer}>
-                {avatarUrl && avatarUrl.trim() !== '' ? (
-                    <Image source={{ uri: resolveMediaUrl(avatarUrl) }} style={styles.avatarImage} />
+                {hasValidAvatar ? (
+                    <Image 
+                        source={{ uri: resolvedUrl }} 
+                        style={styles.avatarImage}
+                        onError={() => setImageError(true)}
+                    />
                 ) : (
                     <DefaultAvatarIcon
                         width={56}

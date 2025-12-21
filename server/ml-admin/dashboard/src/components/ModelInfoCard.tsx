@@ -5,8 +5,9 @@ import {
   Typography,
   Box,
   Chip,
-  CircularProgress,
   Alert,
+  Skeleton,
+  Stack,
 } from '@mui/material';
 import { CheckCircle, Error, AccessTime, Storage, Psychology } from '@mui/icons-material';
 import { mlAdminApi, ModelInfo } from '../api/mlAdminApi';
@@ -49,9 +50,12 @@ export const ModelInfoCard: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="40%" />
+            <Skeleton variant="rounded" height={24} />
+            <Skeleton variant="rounded" height={24} />
+            <Skeleton variant="rounded" height={24} />
+          </Stack>
         </CardContent>
       </Card>
     );
@@ -199,5 +203,3 @@ export const ModelInfoCard: React.FC = () => {
     </Card>
   );
 };
-
-

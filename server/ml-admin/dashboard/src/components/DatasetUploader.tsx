@@ -6,8 +6,8 @@ import {
   Button,
   Box,
   Alert,
-  CircularProgress,
   LinearProgress,
+  CircularProgress,
 } from '@mui/material';
 import { CloudUpload, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
 import { mlAdminApi } from '../api/mlAdminApi';
@@ -132,7 +132,7 @@ export const DatasetUploader: React.FC = () => {
               variant="contained"
               onClick={handleUpload}
               disabled={uploading}
-              startIcon={uploading ? <CircularProgress size={20} /> : <CloudUpload />}
+              startIcon={uploading ? <CircularProgress size={18} /> : <CloudUpload />}
             >
               {uploading ? 'Uploading...' : 'Upload Dataset'}
             </Button>
@@ -166,27 +166,27 @@ export const DatasetUploader: React.FC = () => {
               Import Statistics:
             </Typography>
             <Typography variant="body2">
-              • Users imported: {stats.users_imported || 0}
+              - Users imported: {stats.users_imported || 0}
             </Typography>
             <Typography variant="body2">
-              • Interactions imported: {stats.interactions_imported || 0}
+              - Interactions imported: {stats.interactions_imported || 0}
             </Typography>
             <Typography variant="body2">
-              • Likes: {stats.likes_count || 0}
+              - Likes: {stats.likes_count || 0}
             </Typography>
             <Typography variant="body2">
-              • Dislikes: {stats.dislikes_count || 0}
+              - Dislikes: {stats.dislikes_count || 0}
             </Typography>
             {stats.errors && stats.errors.length > 0 && (
               <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-                • Errors: {stats.errors.length}
+                - Errors: {stats.errors.length}
               </Typography>
             )}
           </Box>
         )}
 
         <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-          💡 Tip: Use the AI Dataset Generation Prompt to create a realistic dataset with 1000+ users.
+          Tip: Use the AI Dataset Generation Prompt to create a realistic dataset with 1000+ users.
         </Typography>
       </CardContent>
     </Card>

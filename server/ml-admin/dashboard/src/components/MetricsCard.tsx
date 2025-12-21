@@ -4,7 +4,6 @@ import {
   CardContent,
   Typography,
   Box,
-  CircularProgress,
   Alert,
   Tabs,
   Tab,
@@ -17,6 +16,8 @@ import {
   Paper,
   Chip,
   Grid,
+  Skeleton,
+  Stack,
 } from '@mui/material';
 import { Assessment, TrendingUp } from '@mui/icons-material';
 import { mlAdminApi, MetricsEvaluationMetadata } from '../api/mlAdminApi';
@@ -73,9 +74,11 @@ export const MetricsCard: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="35%" />
+            <Skeleton variant="rounded" height={160} />
+            <Skeleton variant="rounded" height={120} />
+          </Stack>
         </CardContent>
       </Card>
     );
@@ -226,10 +229,10 @@ export const MetricsCard: React.FC = () => {
             Eval: {evaluation.holdoutStrategy || 'n/a'} ({formatFraction(evaluation.holdoutFraction)} holdout),{' '}
             agg={evaluation.aggregation || 'n/a'}, denom={evaluation.precisionDenominator || 'n/a'}
             {evaluation.averageHoldoutSize !== undefined && (
-              <> · avg_holdout={formatNumber(evaluation.averageHoldoutSize)}</>
+              <> - avg_holdout={formatNumber(evaluation.averageHoldoutSize)}</>
             )}
             {evaluation.averageCandidateCount !== undefined && (
-              <> · avg_candidates={formatNumber(evaluation.averageCandidateCount)}</>
+              <> - avg_candidates={formatNumber(evaluation.averageCandidateCount)}</>
             )}
           </Typography>
         )}

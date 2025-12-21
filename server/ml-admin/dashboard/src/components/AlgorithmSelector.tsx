@@ -10,9 +10,10 @@ import {
   MenuItem,
   Chip,
   Alert,
-  CircularProgress,
   Button,
   Snackbar,
+  Skeleton,
+  Stack,
 } from '@mui/material';
 import { Psychology, AutoAwesome, Save } from '@mui/icons-material';
 import { mlAdminApi, MLHealth } from '../api/mlAdminApi';
@@ -99,9 +100,11 @@ export const AlgorithmSelector: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="40%" />
+            <Skeleton variant="rounded" height={52} />
+            <Skeleton variant="rounded" height={40} />
+          </Stack>
         </CardContent>
       </Card>
     );

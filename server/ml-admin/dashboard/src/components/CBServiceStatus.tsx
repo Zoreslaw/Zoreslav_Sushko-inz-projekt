@@ -5,8 +5,9 @@ import {
   Typography,
   Box,
   Chip,
-  CircularProgress,
   Alert,
+  Skeleton,
+  Stack,
 } from '@mui/material';
 import { CheckCircle, Error, Psychology } from '@mui/icons-material';
 import { mlAdminApi, MLHealth } from '../api/mlAdminApi';
@@ -48,9 +49,11 @@ export const CBServiceStatus: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="45%" />
+            <Skeleton variant="rounded" height={24} />
+            <Skeleton variant="rounded" height={24} />
+          </Stack>
         </CardContent>
       </Card>
     );
@@ -125,4 +128,3 @@ export const CBServiceStatus: React.FC = () => {
     </Card>
   );
 };
-

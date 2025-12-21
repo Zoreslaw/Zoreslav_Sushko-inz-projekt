@@ -3,6 +3,8 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useThemeColor } from '@/hooks/useThemeColor';
 import ProfileEditInput from '@/components/ProfileEditInput';
 
+const EMPTY_OPTIONS: string[] = [];
+
 interface Props {
   options?: string[];
   selected: string[];
@@ -15,7 +17,7 @@ interface Props {
 }
 
 const ProfileEditSearchableSelector: React.FC<Props> = ({
-  options = [],
+  options = EMPTY_OPTIONS,
   selected,
   onChange,
   placeholder = 'Search',
@@ -40,12 +42,13 @@ const ProfileEditSearchableSelector: React.FC<Props> = ({
   }, [options]);
 
   useEffect(() => {
-    setCurrent(selected);
+    setCurrent(prev => {
+      const isSame =
+        selected.length === prev.length &&
+        selected.every((value, index) => value === prev[index]);
+      return isSame ? prev : selected;
+    });
   }, [selected]);
-
-  useEffect(() => {
-    onChange(current);
-  }, [current, onChange]);
 
   useEffect(() => {
     if (!loadOptions) return;
@@ -82,15 +85,19 @@ const ProfileEditSearchableSelector: React.FC<Props> = ({
 
   const toggle = (value: string) => {
     if (single) {
-      setCurrent([value]);
+      const next = [value];
+      setCurrent(next);
+      onChange(next);
       return;
     }
 
-    setCurrent(prev =>
-      prev.includes(value)
+    setCurrent(prev => {
+      const next = prev.includes(value)
         ? prev.filter(item => item !== value)
-        : [...prev, value]
-    );
+        : [...prev, value];
+      onChange(next);
+      return next;
+    });
   };
 
   return (

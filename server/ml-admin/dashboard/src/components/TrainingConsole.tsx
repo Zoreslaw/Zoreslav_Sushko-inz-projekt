@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, CardContent, Typography, Box, Paper, IconButton, CircularProgress } from '@mui/material';
+import { Card, CardContent, Typography, Box, Paper, IconButton, Chip, Skeleton, Stack } from '@mui/material';
 import { Close, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { mlAdminApi } from '../api/mlAdminApi';
 
-interface TrainingConsoleProps { onClose: () => void; }
+interface TrainingConsoleProps {
+  onClose: () => void;
+}
 
 export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -34,8 +36,8 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
           const text = (e.data || '').trim();
           if (!text) return;
 
-          // “heartbeat” events are nice to keep connection alive
-          if (e.type === 'heartbeat' || text === '💓') return;
+          // heartbeat events are nice to keep connection alive
+          if (e.type === 'heartbeat' || text === '<3') return;
 
           setIsWaiting(false);
 
@@ -45,7 +47,6 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
             return;
           }
           setLogs((prev) => [...prev, text]);
-          // autoscroll
           requestAnimationFrame(() => {
             if (containerRef.current) {
               containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -62,10 +63,11 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
 
         eventSource.onerror = () => {
           if (!mounted) return;
-          // reconnect
-          try { eventSource.close(); } catch {}
+          try {
+            eventSource.close();
+          } catch {}
           retryRef.current += 1;
-          attach(); // recurse with backoff
+          attach();
         };
       }, delay);
       return () => clearTimeout(timeout);
@@ -73,7 +75,6 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
 
     const cancel = attach();
 
-    // Give it max 15s to show something, then stop spinner (even if idle)
     const spinnerTimeout = setTimeout(() => {
       if (mounted && logs.length === 0) {
         setIsWaiting(false);
@@ -86,15 +87,19 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
       cancel?.();
       if (esRef.current) esRef.current.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [logs.length]);
 
   return (
     <Card sx={{ mt: 2, border: '2px solid #90caf9' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#1976d2', color: 'white', p: 1, px: 2 }}>
-        {isTraining && <CircularProgress size={20} sx={{ mr: 2, color: 'white' }} />}
+        <Chip
+          label={isTraining ? 'Live' : 'Complete'}
+          size="small"
+          color={isTraining ? 'success' : 'default'}
+          sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
+        />
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          {isTraining ? '🔄 Training in Progress' : '✅ Training Completed'}
+          {isTraining ? 'Training in Progress' : 'Training Completed'}
         </Typography>
         <IconButton size="small" onClick={() => setIsCollapsed(!isCollapsed)} sx={{ color: 'white', mr: 1 }}>
           {isCollapsed ? <ExpandMore /> : <ExpandLess />}
@@ -120,15 +125,15 @@ export const TrainingConsole: React.FC<TrainingConsoleProps> = ({ onClose }) => 
             }}
           >
             {isWaiting && logs.length === 0 ? (
-              <Box display="flex" flexDirection="column" alignItems="center" py={3}>
-                <CircularProgress size={32} sx={{ mb: 2, color: '#90caf9' }} />
+              <Stack spacing={1} alignItems="center" py={3}>
+                <Skeleton variant="circular" width={40} height={40} />
                 <Typography sx={{ color: '#90caf9', fontSize: '14px' }}>
-                  {isTraining ? 'Starting training…' : 'Waiting for logs…'}
+                  {isTraining ? 'Starting training...' : 'Waiting for logs...'}
                 </Typography>
                 <Typography sx={{ color: '#666', fontSize: '12px', mt: 1 }}>
                   This may take a few seconds
                 </Typography>
-              </Box>
+              </Stack>
             ) : (
               <>
                 {logs.map((log, idx) => {

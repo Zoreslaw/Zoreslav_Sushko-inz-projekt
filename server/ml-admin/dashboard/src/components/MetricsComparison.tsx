@@ -4,7 +4,6 @@ import {
   CardContent,
   Typography,
   Box,
-  CircularProgress,
   Alert,
   Table,
   TableBody,
@@ -14,6 +13,8 @@ import {
   TableRow,
   Paper,
   Chip,
+  Skeleton,
+  Stack,
 } from '@mui/material';
 import { CompareArrows } from '@mui/icons-material';
 import { mlAdminApi, MetricsEvaluationMetadata } from '../api/mlAdminApi';
@@ -76,9 +77,11 @@ export const MetricsComparison: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="35%" />
+            <Skeleton variant="rounded" height={140} />
+            <Skeleton variant="rounded" height={120} />
+          </Stack>
         </CardContent>
       </Card>
     );
@@ -143,10 +146,10 @@ export const MetricsComparison: React.FC = () => {
             Eval: {evaluation.holdoutStrategy || 'n/a'} ({formatFraction(evaluation.holdoutFraction)} holdout),{' '}
             agg={evaluation.aggregation || 'n/a'}, denom={evaluation.precisionDenominator || 'n/a'}
             {evaluation.averageHoldoutSize !== undefined && (
-              <> · avg_holdout={formatNumber(evaluation.averageHoldoutSize)}</>
+              <> - avg_holdout={formatNumber(evaluation.averageHoldoutSize)}</>
             )}
             {evaluation.averageCandidateCount !== undefined && (
-              <> · avg_candidates={formatNumber(evaluation.averageCandidateCount)}</>
+              <> - avg_candidates={formatNumber(evaluation.averageCandidateCount)}</>
             )}
           </Typography>
         )}

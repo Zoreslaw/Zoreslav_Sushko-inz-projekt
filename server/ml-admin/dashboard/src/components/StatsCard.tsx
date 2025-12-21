@@ -5,8 +5,8 @@ import {
   Typography,
   Box,
   Grid,
-  CircularProgress,
   Alert,
+  Skeleton,
 } from '@mui/material';
 import { People, ThumbUp, ThumbDown, Insights } from '@mui/icons-material';
 import { mlAdminApi, Stats } from '../api/mlAdminApi';
@@ -42,9 +42,27 @@ export const StatsCard: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Typography variant="h6" gutterBottom>
+            Database Statistics
+          </Typography>
+          <Grid container spacing={2} mt={1}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Grid size={{ xs: 12, sm: 6, md: 3 }} key={index}>
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: 'background.default',
+                    borderRadius: 2,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <Skeleton variant="circular" width={36} height={36} />
+                  <Skeleton variant="text" width="60%" />
+                  <Skeleton variant="text" width="40%" />
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
         </CardContent>
       </Card>
     );
@@ -122,5 +140,4 @@ export const StatsCard: React.FC = () => {
     </Card>
   );
 };
-
 

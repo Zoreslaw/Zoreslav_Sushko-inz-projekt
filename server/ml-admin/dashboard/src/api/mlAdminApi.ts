@@ -51,6 +51,18 @@ export type Stats = {
   total_interactions: number;
 };
 
+export type SteamHealth = {
+  status: string;
+  latency_ms?: number;
+  backend_status?: number;
+  error?: string;
+  timestamp?: string;
+};
+
+export type SteamCatalogResponse = {
+  items: string[];
+};
+
 export type AggregateMetricsResponse = {
   algorithm: string;
   timestamp: string;
@@ -85,7 +97,7 @@ export type MetricsEvaluationMetadata = {
 };
 
 
-type ApiMethod = 'GET' | 'POST';
+type ApiMethod = 'GET' | 'POST' | 'DELETE';
 type Json = Record<string, unknown> | unknown[];
 
 class ApiError extends Error {
@@ -111,16 +123,25 @@ async function fetchJSON<T>(
   path: string,
   method: ApiMethod = 'GET',
   payload?: Json,
-  timeoutMs = DEFAULT_TIMEOUT_MS
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  extraHeaders?: Record<string, string>
 ): Promise<T> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   const url = `${baseUrl}${path}`;
 
+  const mergedHeaders: Record<string, string> = {};
+  if (payload) {
+    mergedHeaders['Content-Type'] = 'application/json';
+  }
+  if (extraHeaders) {
+    Object.assign(mergedHeaders, extraHeaders);
+  }
+
   const res = await fetch(url, {
     method,
     credentials: 'include',
-    headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+    headers: Object.keys(mergedHeaders).length ? mergedHeaders : undefined,
     body: payload ? JSON.stringify(payload) : undefined,
     signal: controller.signal,
   }).catch((e) => {
@@ -142,7 +163,7 @@ async function fetchJSON<T>(
 
 function toEventSource(path: string): EventSource {
   // Browser EventSource will automatically send Last-Event-ID on reconnect
-  // if the server sets "id: ..." per event — which our backend does.
+  // if the server sets "id: ..." per event -- which our backend does.
   const url = `${baseUrl}${path}`;
   return new EventSource(url, { withCredentials: true });
 }
@@ -319,6 +340,80 @@ export const mlAdminApi = {
 
   async activateModel(version: string): Promise<{ message: string; model_path: string }> {
     return fetchJSON(`/api/models/${version}/activate`, 'POST');
+  },
+
+  // ---- Steam API ----
+  async getSteamHealth(): Promise<SteamHealth> {
+    return fetchJSON('/api/steam/health', 'GET');
+  },
+
+  async getSteamCatalog(type: 'games' | 'categories', query = ''): Promise<SteamCatalogResponse> {
+    const params = new URLSearchParams();
+    params.append('type', type);
+    if (query) params.append('query', query);
+    return fetchJSON(`/api/steam/catalog?${params.toString()}`, 'GET');
+  },
+
+  async connectSteam(token: string, steamIdOrUrl: string): Promise<any> {
+    return fetchJSON('/api/steam/connect', 'POST', { steamIdOrUrl }, DEFAULT_TIMEOUT_MS, {
+      Authorization: token,
+    });
+  },
+
+  async syncSteam(token: string): Promise<any> {
+    return fetchJSON('/api/steam/sync', 'POST', undefined, DEFAULT_TIMEOUT_MS, {
+      Authorization: token,
+    });
+  },
+
+  async disconnectSteam(token: string): Promise<any> {
+    return fetchJSON('/api/steam/disconnect', 'POST', undefined, DEFAULT_TIMEOUT_MS, {
+      Authorization: token,
+    });
+  },
+
+  // ---- User Admin ----
+  async getUsers(): Promise<any[]> {
+    return fetchJSON('/api/users', 'GET');
+  },
+
+  async getUser(userId: string): Promise<any> {
+    return fetchJSON(`/api/users/${userId}`, 'GET');
+  },
+
+  async createUser(payload: Record<string, any>): Promise<any> {
+    return fetchJSON('/api/users/create', 'POST', payload);
+  },
+
+  async createRandomUser(): Promise<any> {
+    return fetchJSON('/api/users/random', 'POST');
+  },
+
+  async createRandomUsers(count: number): Promise<any> {
+    return fetchJSON(`/api/users/random/bulk?count=${count}`, 'POST');
+  },
+
+  async deleteUser(userId: string): Promise<any> {
+    return fetchJSON(`/api/users/${userId}`, 'DELETE');
+  },
+
+  async updateUserInteractions(
+    userId: string,
+    payload: { likedIds: string[]; dislikedIds: string[]; replace?: boolean; removeConflicts?: boolean }
+  ): Promise<any> {
+    return fetchJSON(`/api/users/${userId}/interactions`, 'POST', payload);
+  },
+
+  async clearUserInteractions(userId: string): Promise<any> {
+    return fetchJSON(`/api/users/${userId}/interactions/clear`, 'POST');
+  },
+
+  async purgeUserInteractions(payload: {
+    targetUserId: string;
+    removeFromLiked?: boolean;
+    removeFromDisliked?: boolean;
+  }): Promise<any> {
+    return fetchJSON('/api/users/interactions/purge', 'POST', payload);
   },
 
   // ---- Low-level utilities ----

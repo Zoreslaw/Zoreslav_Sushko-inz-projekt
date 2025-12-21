@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, Typography, Box, Button, Chip, Alert, CircularProgress, Select, MenuItem, SelectChangeEvent } from '@mui/material';
+import { Card, CardContent, Typography, Box, Button, Chip, Alert, Skeleton, Stack, CircularProgress } from '@mui/material';
 import { PlayArrow, Stop, AutoMode, CheckCircle, Error as ErrorIcon } from '@mui/icons-material';
-import { mlAdminApi, TrainingStatus, AlgorytmType } from '../api/mlAdminApi';
+import { mlAdminApi, TrainingStatus } from '../api/mlAdminApi';
 import { TrainingConsole } from './TrainingConsole';
 import { NextTrainingProgress } from './NextTrainingProgress';
 
@@ -16,8 +16,6 @@ export const TrainingControl: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
   const prevIsTrainingRef = useRef<boolean>(false);
-  const [algorytmType, setAlgorytmType] = useState<AlgorytmType>('TwoTower')
-
   const fetchStatus = useCallback(async () => {
     try {
       const data = await mlAdminApi.getTrainingStatus();
@@ -72,13 +70,17 @@ export const TrainingControl: React.FC = () => {
     }
   };
 
-  const handleChange = (event: SelectChangeEvent) => {
-    event.target.value === 'TwoTower' || event.target.value === 'ContentBased' ? setAlgorytmType(event.target.value) : alert("Error algorytm type is wrong...");
-  };
-
   if (loading) {
     return (
-      <Card><CardContent><Box display="flex" justifyContent="center" p={2}><CircularProgress /></Box></CardContent></Card>
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="40%" />
+            <Skeleton variant="rounded" height={32} />
+            <Skeleton variant="rounded" height={80} />
+          </Stack>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -164,40 +166,26 @@ export const TrainingControl: React.FC = () => {
           <Button
             variant="contained"
             color="primary"
-            startIcon={triggering ? <CircularProgress size={20} /> : <PlayArrow />}
+            startIcon={triggering ? <CircularProgress size={18} /> : <PlayArrow />}
             onClick={handleTriggerTraining}
             disabled={status?.is_training || triggering}
             sx={{ flex: 1 }}
           >
-            {triggering ? 'Triggering…' : 'Trigger Training'}
+            {triggering ? 'Triggering...' : 'Trigger Training'}
           </Button>
           {status?.is_training && (
             <Button
               variant="contained"
               color="error"
-              startIcon={stopping ? <CircularProgress size={20} /> : <Stop />}
+              startIcon={stopping ? <CircularProgress size={18} /> : <Stop />}
               onClick={handleStopTraining}
               disabled={stopping}
               sx={{ flex: 1 }}
             >
-              {stopping ? 'Stopping…' : 'Stop Training'}
+              {stopping ? 'Stopping...' : 'Stop Training'}
             </Button>
           )}
         </Box>
-
-        <Select
-          value={algorytmType}
-          onChange={handleChange}
-          displayEmpty
-          inputProps={{ 'aria-label': 'Without label' }}
-        >
-          <MenuItem value="">
-            <em>None</em>
-          </MenuItem>
-          <MenuItem value={10}>Ten</MenuItem>
-          <MenuItem value={20}>Twenty</MenuItem>
-          <MenuItem value={30}>Thirty</MenuItem>
-        </Select>
 
         <NextTrainingProgress />
       </CardContent>

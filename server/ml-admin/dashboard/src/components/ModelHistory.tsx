@@ -14,7 +14,6 @@ import {
   Chip,
   Button,
   Pagination,
-  CircularProgress,
   Alert,
   Dialog,
   DialogTitle,
@@ -26,6 +25,9 @@ import {
   Checkbox,
   FormControlLabel,
   TextField,
+  Skeleton,
+  Stack,
+  CircularProgress,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -167,9 +169,11 @@ export const ModelHistory: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="35%" />
+            <Skeleton variant="rounded" height={180} />
+            <Skeleton variant="rounded" height={120} />
+          </Stack>
         </CardContent>
       </Card>
     );
@@ -433,5 +437,3 @@ export const ModelHistory: React.FC = () => {
     </>
   );
 };
-
-

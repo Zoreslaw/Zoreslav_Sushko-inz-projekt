@@ -7,9 +7,11 @@ import {
   TextField,
   Box,
   Alert,
-  CircularProgress,
   Grid,
   Chip,
+  Skeleton,
+  Stack,
+  CircularProgress,
 } from '@mui/material';
 import { DataObject, Refresh } from '@mui/icons-material';
 import { mlAdminApi } from '../api/mlAdminApi';
@@ -78,26 +80,40 @@ export const DataGenerator: React.FC = () => {
         </Typography>
 
         {/* Current Stats */}
-        {stats && (
+        {loadingStats ? (
           <Box mb={3} p={2} bgcolor="background.default" borderRadius={1}>
             <Typography variant="subtitle2" gutterBottom>
               Current Database Stats:
             </Typography>
-            <Grid container spacing={2}>
-              <Grid>
-                <Chip label={`Users: ${stats.total_users || 0}`} color="primary" variant="outlined" />
-              </Grid>
-              <Grid>
-                <Chip label={`Likes: ${stats.total_likes || 0}`} color="success" variant="outlined" />
-              </Grid>
-              <Grid>
-                <Chip label={`Dislikes: ${stats.total_dislikes || 0}`} color="error" variant="outlined" />
-              </Grid>
-              <Grid>
-                <Chip label={`Total Interactions: ${stats.total_interactions || 0}`} variant="outlined" />
-              </Grid>
-            </Grid>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Skeleton variant="rounded" width={110} height={28} />
+              <Skeleton variant="rounded" width={110} height={28} />
+              <Skeleton variant="rounded" width={120} height={28} />
+              <Skeleton variant="rounded" width={140} height={28} />
+            </Stack>
           </Box>
+        ) : (
+          stats && (
+            <Box mb={3} p={2} bgcolor="background.default" borderRadius={1}>
+              <Typography variant="subtitle2" gutterBottom>
+                Current Database Stats:
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid>
+                  <Chip label={`Users: ${stats.total_users || 0}`} color="primary" variant="outlined" />
+                </Grid>
+                <Grid>
+                  <Chip label={`Likes: ${stats.total_likes || 0}`} color="success" variant="outlined" />
+                </Grid>
+                <Grid>
+                  <Chip label={`Dislikes: ${stats.total_dislikes || 0}`} color="error" variant="outlined" />
+                </Grid>
+                <Grid>
+                  <Chip label={`Total Interactions: ${stats.total_interactions || 0}`} variant="outlined" />
+                </Grid>
+              </Grid>
+            </Box>
+          )
         )}
 
         {/* Generate Form */}
@@ -115,7 +131,7 @@ export const DataGenerator: React.FC = () => {
             variant="contained"
             onClick={handleGenerate}
             disabled={loading || count < 1}
-            startIcon={loading ? <CircularProgress size={20} /> : <Refresh />}
+            startIcon={loading ? <CircularProgress size={18} /> : <Refresh />}
             sx={{ mt: 1 }}
           >
             {loading ? 'Generating...' : 'Generate Interactions'}
@@ -136,7 +152,7 @@ export const DataGenerator: React.FC = () => {
         )}
 
         <Typography variant="caption" color="text.secondary">
-          💡 Tip: After generating interactions, refresh the Metrics section to see updated results.
+          Tip: After generating interactions, refresh the Metrics section to see updated results.
         </Typography>
       </CardContent>
     </Card>

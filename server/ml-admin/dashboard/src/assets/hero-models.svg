@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="models-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="55%" stop-color="#0f1c2b"/>
+      <stop offset="100%" stop-color="#0b1320"/>
+    </linearGradient>
+    <linearGradient id="models-core" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00d0a0"/>
+      <stop offset="100%" stop-color="#5fe3c0"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="28" fill="url(#models-bg)"/>
+
+  <g transform="translate(70 70)">
+    <rect x="0" y="0" width="210" height="220" rx="22" fill="#111827" stroke="#1f2a44"/>
+    <rect x="20" y="26" width="120" height="12" rx="6" fill="#23304b"/>
+    <rect x="20" y="52" width="160" height="10" rx="5" fill="#2a3754"/>
+    <rect x="20" y="76" width="130" height="10" rx="5" fill="#2a3754"/>
+    <rect x="20" y="100" width="150" height="10" rx="5" fill="#2a3754"/>
+    <rect x="20" y="150" width="170" height="46" rx="12" fill="#0d1a31"/>
+    <circle cx="160" cy="173" r="16" fill="url(#models-core)"/>
+  </g>
+
+  <g transform="translate(330 80)">
+    <rect x="0" y="0" width="240" height="200" rx="24" fill="#0f172a" stroke="#1f2a44"/>
+    <circle cx="120" cy="70" r="45" fill="url(#models-core)" opacity="0.9"/>
+    <circle cx="120" cy="70" r="22" fill="#0f172a"/>
+    <rect x="50" y="130" width="140" height="14" rx="7" fill="#23304b"/>
+    <rect x="50" y="156" width="100" height="14" rx="7" fill="#23304b"/>
+  </g>
+
+  <g transform="translate(360 30)" opacity="0.5">
+    <path d="M0 0 C60 30, 100 30, 160 0" fill="none" stroke="#2a3754" stroke-width="2"/>
+    <path d="M10 16 C70 40, 100 40, 150 16" fill="none" stroke="#2a3754" stroke-width="2"/>
+  </g>
+</svg>

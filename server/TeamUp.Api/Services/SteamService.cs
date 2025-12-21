@@ -75,6 +75,15 @@ public class SteamService
         var normalized = query?.Trim() ?? string.Empty;
         var max = limit.GetValueOrDefault(_searchLimit);
 
+        if (appList.Count == 0 && !string.IsNullOrWhiteSpace(normalized))
+        {
+            var fallback = await SearchAppsViaCommunityAsync(normalized, max);
+            if (fallback.Count > 0)
+            {
+                return fallback;
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return appList
@@ -177,10 +186,34 @@ public class SteamService
             return cached;
         }
 
-        var url = $"{WebApiBaseUrl}/ISteamApps/GetAppList/v2/";
-        using var response = await _client.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadAsStringAsync();
+        var urls = new[]
+        {
+            $"{WebApiBaseUrl}/ISteamApps/GetAppList/v2/",
+            $"{WebApiBaseUrl}/ISteamApps/GetAppList/v0002/"
+        };
+
+        HttpResponseMessage? response = null;
+        string? json = null;
+
+        foreach (var url in urls)
+        {
+            response = await _client.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                json = await response.Content.ReadAsStringAsync();
+                break;
+            }
+            if (response.StatusCode != HttpStatusCode.NotFound)
+            {
+                response.EnsureSuccessStatusCode();
+            }
+        }
+
+        if (json == null)
+        {
+            return new List<SteamApp>();
+        }
+
         using var doc = JsonDocument.Parse(json);
         var apps = new List<SteamApp>();
 
@@ -196,8 +229,45 @@ public class SteamService
             }
         }
 
-        _cache.Set(AppListCacheKey, apps, TimeSpan.FromMinutes(_appListCacheMinutes));
+        if (apps.Count > 0)
+        {
+            _cache.Set(AppListCacheKey, apps, TimeSpan.FromMinutes(_appListCacheMinutes));
+        }
         return apps;
+    }
+
+    private async Task<List<string>> SearchAppsViaCommunityAsync(string query, int limit)
+    {
+        try
+        {
+            var url = $"https://steamcommunity.com/actions/SearchApps/{WebUtility.UrlEncode(query)}";
+            using var response = await _client.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new List<string>();
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var results = new List<string>();
+
+            foreach (var entry in doc.RootElement.EnumerateArray())
+            {
+                if (!entry.TryGetProperty("name", out var nameElement)) continue;
+                var name = nameElement.GetString();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    results.Add(name);
+                }
+            }
+
+            return results.Distinct(StringComparer.OrdinalIgnoreCase).Take(limit).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Steam community search failed.");
+            return new List<string>();
+        }
     }
 
     private async Task<List<string>> GetCategoryListAsync()

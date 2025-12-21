@@ -525,6 +525,211 @@ def upload_dataset():
     except Exception as e:
         return jsonify({'error': str(e)}), 503
 
+@app.get('/api/users')
+def list_users():
+    """Proxy to backend API to list users."""
+    try:
+        r = requests.get(f'{BACKEND_URL}/api/users', timeout=20)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.get('/api/users/<user_id>')
+def get_user(user_id):
+    """Proxy to backend API to fetch a single user."""
+    try:
+        r = requests.get(f'{BACKEND_URL}/api/users/{user_id}', timeout=20)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/create')
+def create_user():
+    """Proxy to backend API to create a user."""
+    try:
+        data = request.get_json() or {}
+        r = requests.post(f'{BACKEND_URL}/api/users/create', json=data, timeout=20)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/random')
+def create_random_user():
+    """Proxy to backend API to create a random user."""
+    try:
+        r = requests.post(f'{BACKEND_URL}/api/users/random', timeout=20)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/random/bulk')
+def create_random_users():
+    """Proxy to backend API to create random users in bulk."""
+    try:
+        count = request.args.get('count', default=10, type=int)
+        r = requests.post(f'{BACKEND_URL}/api/users/random/bulk', params={'count': count}, timeout=30)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.delete('/api/users/<user_id>')
+def delete_user(user_id):
+    """Proxy to backend API to delete a user."""
+    try:
+        r = requests.delete(f'{BACKEND_URL}/api/users/{user_id}', timeout=30)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/<user_id>/interactions')
+def update_user_interactions(user_id):
+    """Proxy to backend API to update user interactions."""
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/{user_id}/interactions',
+            json=data,
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/<user_id>/interactions/clear')
+def clear_user_interactions(user_id):
+    """Proxy to backend API to clear user interactions."""
+    try:
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/{user_id}/interactions/clear',
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/users/interactions/purge')
+def purge_user_interactions():
+    """Proxy to backend API to purge user interactions globally."""
+    try:
+        data = request.get_json() or {}
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/interactions/purge',
+            json=data,
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.get('/api/steam/health')
+def steam_health():
+    """Lightweight Steam API connectivity check via backend health endpoint."""
+    start = time.time()
+    try:
+        r = requests.get(
+            f'{BACKEND_URL}/api/steam/health',
+            timeout=10
+        )
+        latency_ms = int((time.time() - start) * 1000)
+        body = {}
+        try:
+            body = r.json()
+        except Exception:
+            body = {}
+        if r.status_code == 200:
+            return jsonify({
+                'status': body.get('status', 'ok'),
+                'latency_ms': body.get('latency_ms', latency_ms),
+                'backend_status': r.status_code,
+                'error': body.get('error'),
+                'timestamp': body.get('timestamp') or datetime.utcnow().isoformat()
+            }), 200
+        return jsonify({
+            'status': 'degraded',
+            'latency_ms': latency_ms,
+            'backend_status': r.status_code,
+            'error': body.get('error') or body.get('message') or 'Steam check failed',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        latency_ms = int((time.time() - start) * 1000)
+        return jsonify({
+            'status': 'unavailable',
+            'latency_ms': latency_ms,
+            'backend_status': None,
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+
+@app.get('/api/steam/catalog')
+def steam_catalog():
+    """Proxy to backend Steam catalog endpoint."""
+    try:
+        kind = request.args.get('type', 'games')
+        query = request.args.get('query', '')
+        limit = request.args.get('limit', default=60, type=int)
+        r = requests.get(
+            f'{BACKEND_URL}/api/steam/catalog',
+            params={'type': kind, 'query': query, 'limit': limit},
+            timeout=20
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/steam/connect')
+def steam_connect():
+    """Proxy to backend Steam connect endpoint with auth header passthrough."""
+    try:
+        data = request.get_json() or {}
+        headers = {}
+        auth = request.headers.get('Authorization')
+        if auth:
+            headers['Authorization'] = auth
+        r = requests.post(
+            f'{BACKEND_URL}/api/steam/connect',
+            json=data,
+            timeout=30,
+            headers=headers
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/steam/sync')
+def steam_sync():
+    """Proxy to backend Steam sync endpoint with auth header passthrough."""
+    try:
+        headers = {}
+        auth = request.headers.get('Authorization')
+        if auth:
+            headers['Authorization'] = auth
+        r = requests.post(
+            f'{BACKEND_URL}/api/steam/sync',
+            timeout=30,
+            headers=headers
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/steam/disconnect')
+def steam_disconnect():
+    """Proxy to backend Steam disconnect endpoint with auth header passthrough."""
+    try:
+        headers = {}
+        auth = request.headers.get('Authorization')
+        if auth:
+            headers['Authorization'] = auth
+        r = requests.post(
+            f'{BACKEND_URL}/api/steam/disconnect',
+            timeout=30,
+            headers=headers
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
 @app.get('/api/stats')
 def get_stats():
     import psycopg2

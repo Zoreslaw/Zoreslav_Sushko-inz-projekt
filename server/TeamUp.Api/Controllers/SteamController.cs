@@ -160,23 +160,60 @@ public class SteamController : ControllerBase
     }
 
     [HttpGet("catalog")]
+    [AllowAnonymous]
     public async Task<ActionResult<SteamCatalogResponse>> GetCatalog([FromQuery] string type, [FromQuery] string? query, [FromQuery] int? limit)
     {
-        var normalized = type?.Trim().ToLowerInvariant();
-        List<string> items;
-
-        switch (normalized)
+        try
         {
-            case "games":
-                items = await _steamService.SearchAppsAsync(query ?? string.Empty, limit);
-                break;
-            case "categories":
-                items = await _steamService.SearchCategoriesAsync(query ?? string.Empty, limit);
-                break;
-            default:
-                return BadRequest(new { error = "Invalid catalog type. Use 'games' or 'categories'." });
-        }
+            var normalized = type?.Trim().ToLowerInvariant();
+            List<string> items;
 
-        return Ok(new SteamCatalogResponse { Items = items });
+            switch (normalized)
+            {
+                case "games":
+                    items = await _steamService.SearchAppsAsync(query ?? string.Empty, limit);
+                    break;
+                case "categories":
+                    items = await _steamService.SearchCategoriesAsync(query ?? string.Empty, limit);
+                    break;
+                default:
+                    return BadRequest(new { error = "Invalid catalog type. Use 'games' or 'categories'." });
+            }
+
+            return Ok(new SteamCatalogResponse { Items = items });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Steam catalog lookup failed for {Type} query {Query}", type, query);
+            return StatusCode(503, new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("health")]
+    [AllowAnonymous]
+    public async Task<ActionResult> Health()
+    {
+        var start = DateTime.UtcNow;
+        try
+        {
+            await _steamService.SearchAppsAsync(string.Empty, 1);
+            return Ok(new
+            {
+                status = "ok",
+                latency_ms = (int)(DateTime.UtcNow - start).TotalMilliseconds,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Steam health check failed.");
+            return Ok(new
+            {
+                status = "degraded",
+                latency_ms = (int)(DateTime.UtcNow - start).TotalMilliseconds,
+                error = ex.Message,
+                timestamp = DateTime.UtcNow
+            });
+        }
     }
 }

@@ -41,6 +41,7 @@ interface AuthHeaderProps {
 export const AuthHeader: React.FC<AuthHeaderProps> = ({
   containerStyle,
   showLogo = true,
+  logoColor,
 }) => {
   const navigation = useNavigation();
 
@@ -49,7 +50,7 @@ export const AuthHeader: React.FC<AuthHeaderProps> = ({
   return (
     <View style={[styles.container, containerStyle]}>
         {canGoBack && <BackButton />}
-        {showLogo && <TeamUpLogo />}
+        {showLogo && <TeamUpLogo fill={logoColor} />}
     </View>
   );
 };

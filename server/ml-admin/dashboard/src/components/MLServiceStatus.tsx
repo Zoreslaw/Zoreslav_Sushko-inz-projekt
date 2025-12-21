@@ -5,9 +5,9 @@ import {
   Typography,
   Box,
   Chip,
-  CircularProgress,
   Alert,
-  Grid,
+  Skeleton,
+  Stack,
 } from '@mui/material';
 import { CheckCircle, Error, DeviceHub, Memory } from '@mui/icons-material';
 import { mlAdminApi, MLHealth } from '../api/mlAdminApi';
@@ -49,9 +49,12 @@ export const MLServiceStatus: React.FC = () => {
     return (
       <Card>
         <CardContent>
-          <Box display="flex" justifyContent="center" p={2}>
-            <CircularProgress />
-          </Box>
+          <Stack spacing={2}>
+            <Skeleton variant="text" width="45%" />
+            <Skeleton variant="rounded" height={24} />
+            <Skeleton variant="rounded" height={24} />
+            <Skeleton variant="rounded" height={24} />
+          </Stack>
         </CardContent>
       </Card>
     );
@@ -133,5 +136,4 @@ export const MLServiceStatus: React.FC = () => {
     </Card>
   );
 };
-
 

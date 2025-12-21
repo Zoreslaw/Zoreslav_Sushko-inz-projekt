@@ -83,6 +83,275 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpPost("create")]
+    public async Task<ActionResult<User>> CreateUser([FromBody] CreateUserRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                return BadRequest(new { error = "DisplayName and Email are required." });
+            }
+
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            var emailExists = await _context.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail);
+            if (emailExists)
+            {
+                return Conflict(new { error = "Email already exists." });
+            }
+
+            var age = request.Age ?? 18;
+            age = Math.Clamp(age, 18, 100);
+            var gender = string.IsNullOrWhiteSpace(request.Gender) ? "Unknown" : request.Gender.Trim();
+            var preferenceGender = string.IsNullOrWhiteSpace(request.PreferenceGender) ? "Any" : request.PreferenceGender.Trim();
+
+            var user = new User
+            {
+                DisplayName = request.DisplayName.Trim(),
+                Email = normalizedEmail,
+                Age = age,
+                Gender = gender,
+                Description = request.Description?.Trim(),
+                PhotoUrl = request.PhotoUrl?.Trim(),
+                FavoriteCategory = request.FavoriteCategory?.Trim(),
+                PreferenceGender = preferenceGender,
+                PreferenceAgeMin = request.PreferenceAgeMin,
+                PreferenceAgeMax = request.PreferenceAgeMax,
+                FavoriteGames = request.FavoriteGames?.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct().ToList() ?? new List<string>(),
+                OtherGames = request.OtherGames?.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct().ToList() ?? new List<string>(),
+                Languages = request.Languages?.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct().ToList() ?? new List<string>(),
+                PreferenceCategories = request.PreferenceCategories?.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct().ToList() ?? new List<string>(),
+                PreferenceLanguages = request.PreferenceLanguages?.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct().ToList() ?? new List<string>(),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user");
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<ActionResult<object>> DeleteUser(string id)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new { error = "User not found" });
+            }
+
+            var impactedUsers = await _context.Users
+                .Where(u => u.Liked.Contains(id) || u.Disliked.Contains(id))
+                .ToListAsync();
+
+            foreach (var other in impactedUsers)
+            {
+                other.Liked.RemoveAll(v => v == id);
+                other.Disliked.RemoveAll(v => v == id);
+                other.UpdatedAt = DateTime.UtcNow;
+            }
+
+            var messages = await _context.Messages
+                .Where(m => m.SenderId == id || m.RecipientId == id)
+                .ToListAsync();
+            _context.Messages.RemoveRange(messages);
+
+            var participants = await _context.ConversationParticipants
+                .Where(cp => cp.UserId == id)
+                .ToListAsync();
+            _context.ConversationParticipants.RemoveRange(participants);
+
+            var refreshTokens = await _context.RefreshTokens
+                .Where(rt => rt.UserId == id)
+                .ToListAsync();
+            _context.RefreshTokens.RemoveRange(refreshTokens);
+
+            var presence = await _context.UserPresences
+                .Where(p => p.UserId == id)
+                .ToListAsync();
+            _context.UserPresences.RemoveRange(presence);
+
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "User deleted",
+                deleted_user_id = id,
+                messages_removed = messages.Count,
+                interactions_removed_from_other_users = impactedUsers.Count
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting user {UserId}", id);
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    [HttpPost("{id}/interactions")]
+    public async Task<ActionResult<object>> UpdateInteractions(string id, [FromBody] UpdateInteractionsRequest request)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new { error = "User not found" });
+            }
+
+            var liked = NormalizeIdList(request.LikedIds, id);
+            var disliked = NormalizeIdList(request.DislikedIds, id);
+
+            var existingIds = await _context.Users
+                .Where(u => liked.Contains(u.Id) || disliked.Contains(u.Id))
+                .Select(u => u.Id)
+                .ToListAsync();
+            var existingSet = existingIds.ToHashSet();
+
+            liked = liked.Where(existingSet.Contains).ToList();
+            disliked = disliked.Where(existingSet.Contains).ToList();
+
+            if (request.RemoveConflicts)
+            {
+                disliked = disliked.Where(idValue => !liked.Contains(idValue)).ToList();
+            }
+
+            if (request.Replace)
+            {
+                user.Liked = liked;
+                user.Disliked = disliked;
+            }
+            else
+            {
+                foreach (var likeId in liked)
+                {
+                    if (!user.Liked.Contains(likeId))
+                    {
+                        user.Liked.Add(likeId);
+                    }
+                    user.Disliked.Remove(likeId);
+                }
+
+                foreach (var dislikeId in disliked)
+                {
+                    if (!user.Disliked.Contains(dislikeId))
+                    {
+                        user.Disliked.Add(dislikeId);
+                    }
+                    user.Liked.Remove(dislikeId);
+                }
+            }
+
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Interactions updated",
+                user_id = user.Id,
+                liked_count = user.Liked.Count,
+                disliked_count = user.Disliked.Count
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating interactions for user {UserId}", id);
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    [HttpPost("{id}/interactions/clear")]
+    public async Task<ActionResult<object>> ClearInteractions(string id)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound(new { error = "User not found" });
+            }
+
+            user.Liked.Clear();
+            user.Disliked.Clear();
+            user.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Interactions cleared", user_id = user.Id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing interactions for user {UserId}", id);
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    [HttpPost("interactions/purge")]
+    public async Task<ActionResult<object>> PurgeInteractions([FromBody] PurgeInteractionsRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.TargetUserId))
+            {
+                return BadRequest(new { error = "TargetUserId is required" });
+            }
+
+            var users = await _context.Users.ToListAsync();
+            var affected = 0;
+
+            foreach (var user in users)
+            {
+                var changed = false;
+                if (request.RemoveFromLiked && user.Liked.RemoveAll(id => id == request.TargetUserId) > 0)
+                {
+                    changed = true;
+                }
+                if (request.RemoveFromDisliked && user.Disliked.RemoveAll(id => id == request.TargetUserId) > 0)
+                {
+                    changed = true;
+                }
+                if (changed)
+                {
+                    user.UpdatedAt = DateTime.UtcNow;
+                    affected++;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Interactions purged",
+                target_user_id = request.TargetUserId,
+                users_updated = affected
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error purging interactions for target {TargetUserId}", request.TargetUserId);
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    private static List<string> NormalizeIdList(IEnumerable<string> ids, string? selfId)
+    {
+        return ids
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Where(id => string.IsNullOrWhiteSpace(selfId) || id != selfId)
+            .Distinct()
+            .ToList();
+    }
+
     [HttpPost("random")]
     public async Task<ActionResult<User>> CreateRandomUser()
     {

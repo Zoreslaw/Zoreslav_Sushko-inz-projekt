@@ -797,24 +797,10 @@ export const UserManagement: React.FC = () => {
     try {
       setProfileLoading(true);
       setProfileError(null);
-      const sharedGamesSet = new Set(sharedGames.map((game) => game.toLowerCase()));
-      const sharedCategoriesSet = new Set(sharedCategories.map((category) => category.toLowerCase()));
-      const favoriteGames = normalizeStringList(profileForm.favoriteGames).filter(
-        (game) => !hasSharedGames || sharedGamesSet.has(game.toLowerCase())
-      );
-      const otherGames = normalizeStringList(profileForm.otherGames).filter(
-        (game) => !hasSharedGames || sharedGamesSet.has(game.toLowerCase())
-      );
-      const preferenceCategories = normalizeStringList(profileForm.preferenceCategories).filter(
-        (category) => !hasSharedCategories || sharedCategoriesSet.has(category.toLowerCase())
-      );
+      const favoriteGames = normalizeStringList(profileForm.favoriteGames);
+      const otherGames = normalizeStringList(profileForm.otherGames);
+      const preferenceCategories = normalizeStringList(profileForm.preferenceCategories);
       const favoriteCategory = profileForm.favoriteCategory.trim();
-      const safeFavoriteCategory =
-        !hasSharedCategories || !favoriteCategory
-          ? favoriteCategory
-          : sharedCategoriesSet.has(favoriteCategory.toLowerCase())
-          ? favoriteCategory
-          : '';
       const payload = {
         displayName: profileForm.displayName.trim(),
         email: profileForm.email.trim(),
@@ -822,7 +808,7 @@ export const UserManagement: React.FC = () => {
         gender: profileForm.gender.trim(),
         description: profileForm.description.trim(),
         photoUrl: profileForm.photoUrl.trim(),
-        favoriteCategory: safeFavoriteCategory,
+        favoriteCategory,
         preferenceGender: profileForm.preferenceGender.trim(),
         preferenceAgeMin: Number.isFinite(profileForm.preferenceAgeMin)
           ? profileForm.preferenceAgeMin
@@ -886,12 +872,23 @@ export const UserManagement: React.FC = () => {
       </Stack>
     );
   };
-  const hasSharedGames = sharedGames.length > 0;
-  const hasSharedCategories = sharedCategories.length > 0;
-  const languageOptions = useMemo(
-    () => LANGUAGE_OPTIONS,
-    []
-  );
+  const languageOptions = useMemo(() => LANGUAGE_OPTIONS, []);
+
+  const combinedGamesOptions = useMemo(() => {
+    const base = sharedGames ?? [];
+    if (!catalogGames.length) return base;
+    const lowerBase = new Set(base.map((g) => g.toLowerCase()));
+    const extras = catalogGames.filter((g) => !lowerBase.has(g.toLowerCase()));
+    return [...base, ...extras];
+  }, [sharedGames, catalogGames]);
+
+  const combinedCategoryOptions = useMemo(() => {
+    const base = sharedCategories ?? [];
+    if (!catalogCategories.length) return base;
+    const lowerBase = new Set(base.map((c) => c.toLowerCase()));
+    const extras = catalogCategories.filter((c) => !lowerBase.has(c.toLowerCase()));
+    return [...base, ...extras];
+  }, [sharedCategories, catalogCategories]);
 
   useEffect(() => {
     let active = true;
@@ -1742,89 +1739,97 @@ export const UserManagement: React.FC = () => {
                       <Grid container spacing={2}>
                         <Grid size={{ xs: 12, md: 6 }}>
                           <Autocomplete
-                            options={sharedCategories}
+                            options={combinedCategoryOptions}
+                            loading={catalogCategoriesLoading}
                             value={profileForm.favoriteCategory || null}
                             onChange={(_, value) =>
                               setProfileForm({ ...profileForm, favoriteCategory: value ?? '' })
                             }
+                            onInputChange={(_, value) => setCatalogCategoriesQuery(value)}
                             renderInput={(params) => (
                               <TextField
                                 {...params}
                                 label="Favorite category"
                                 helperText={
-                                  hasSharedCategories
-                                    ? 'Choose from Steam shared categories'
-                                    : 'No Steam categories available'
+                                  sharedCategories.length
+                                    ? 'Choose from shared or search Steam catalog'
+                                    : 'Search categories from Steam catalog'
                                 }
                               />
                             )}
-                            noOptionsText="No shared categories"
+                            noOptionsText="No categories found"
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
                           <Autocomplete
                             multiple
-                            options={sharedCategories}
+                            options={combinedCategoryOptions}
+                            loading={catalogCategoriesLoading}
                             value={profileForm.preferenceCategories}
                             onChange={(_, value) =>
                               setProfileForm({ ...profileForm, preferenceCategories: value })
                             }
+                            onInputChange={(_, value) => setCatalogCategoriesQuery(value)}
                             renderInput={(params) => (
                               <TextField
                                 {...params}
                                 label="Preference categories"
                                 helperText={
-                                  hasSharedCategories
-                                    ? 'Choose from Steam shared categories'
-                                    : 'No Steam categories available'
+                                  sharedCategories.length
+                                    ? 'Choose from shared or search Steam catalog'
+                                    : 'Search categories from Steam catalog'
                                 }
                               />
                             )}
-                            noOptionsText="No shared categories"
+                            noOptionsText="No categories found"
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
                           <Autocomplete
                             multiple
-                            options={sharedGames}
+                            options={combinedGamesOptions}
+                            loading={catalogGamesLoading}
                             value={profileForm.favoriteGames}
                             onChange={(_, value) =>
                               setProfileForm({ ...profileForm, favoriteGames: value })
                             }
+                            onInputChange={(_, value) => setCatalogGamesQuery(value)}
                             renderInput={(params) => (
                               <TextField
                                 {...params}
                                 label="Favorite games"
                                 helperText={
-                                  hasSharedGames
-                                    ? 'Choose from Steam shared games'
-                                    : 'No Steam games available'
+                                  sharedGames.length
+                                    ? 'Choose from shared or search Steam catalog'
+                                    : 'Search games from Steam catalog'
                                 }
                               />
                             )}
-                            noOptionsText="No shared games"
+                            noOptionsText="No games found"
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
                           <Autocomplete
                             multiple
-                            options={sharedGames}
+                            options={combinedGamesOptions}
+                            loading={catalogGamesLoading}
                             value={profileForm.otherGames}
                             onChange={(_, value) =>
                               setProfileForm({ ...profileForm, otherGames: value })
                             }
+                            onInputChange={(_, value) => setCatalogGamesQuery(value)}
                             renderInput={(params) => (
                               <TextField
                                 {...params}
                                 label="Other games"
                                 helperText={
-                                  hasSharedGames
-                                    ? 'Choose from Steam shared games'
-                                    : 'No Steam games available'
+                                  sharedGames.length
+                                    ? 'Choose from shared or search Steam catalog'
+                                    : 'Search games from Steam catalog'
                                 }
                               />
                             )}
-                            noOptionsText="No shared games"
+                            noOptionsText="No games found"
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>

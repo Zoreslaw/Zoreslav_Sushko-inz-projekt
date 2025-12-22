@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -18,11 +18,14 @@ import {
   Grid,
   Skeleton,
   Stack,
+  Button,
 } from '@mui/material';
 import { Assessment, TrendingUp } from '@mui/icons-material';
 import { mlAdminApi, MetricsEvaluationMetadata } from '../api/mlAdminApi';
 import { useAlgorithm } from '../contexts/AlgorithmContext';
 import { MetricsCharts } from './MetricsCharts';
+
+const K_VALUES = [5, 10, 20];
 
 interface MetricsData {
   algorithm: string;
@@ -46,31 +49,41 @@ interface MetricsData {
 export const MetricsCard: React.FC = () => {
   const { currentAlgorithm } = useAlgorithm();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [tabValue, setTabValue] = useState(0);
-  const kValues = [5, 10, 20];
 
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
+  const fetchMetrics = useCallback(async (showSkeleton: boolean) => {
+    try {
+      if (showSkeleton) {
         setLoading(true);
-        setError(null);
-        const data = await mlAdminApi.getAggregateMetrics(currentAlgorithm, kValues);
-        setMetrics(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch metrics');
-      } finally {
-        setLoading(false);
+      } else {
+        setRefreshing(true);
       }
-    };
-
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 60000); // Refresh every minute
-    return () => clearInterval(interval);
+      setError(null);
+      const data = await mlAdminApi.getAggregateMetrics(currentAlgorithm, K_VALUES);
+      setMetrics(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch metrics');
+    } finally {
+      if (showSkeleton) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
+    }
   }, [currentAlgorithm]);
 
-  if (loading) {
+  useEffect(() => {
+    void fetchMetrics(true);
+  }, [fetchMetrics]);
+
+  const handleRefresh = () => {
+    void fetchMetrics(false);
+  };
+
+  if (loading && !metrics) {
     return (
       <Card>
         <CardContent>
@@ -84,11 +97,21 @@ export const MetricsCard: React.FC = () => {
     );
   }
 
-  if (error || !metrics) {
+  if (!metrics) {
     return (
       <Card>
         <CardContent>
-          <Alert severity="error">{error || 'No metrics data available'}</Alert>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error || 'No metrics data available'}
+          </Alert>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
         </CardContent>
       </Card>
     );
@@ -124,6 +147,15 @@ export const MetricsCard: React.FC = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Recommendation Metrics ({currentAlgorithm})
           </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            sx={{ mr: 2 }}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
           {metrics.userCount && (
             <Chip
               label={`${metrics.userCount} users`}
@@ -132,6 +164,12 @@ export const MetricsCard: React.FC = () => {
             />
           )}
         </Box>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
         <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} sx={{ mb: 2 }}>
           <Tab label="Recommendation Metrics" />
@@ -144,7 +182,7 @@ export const MetricsCard: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Metric</TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">@{k}</TableCell>
                   ))}
                 </TableRow>
@@ -152,25 +190,25 @@ export const MetricsCard: React.FC = () => {
               <TableBody>
                 <TableRow>
                   <TableCell><strong>Precision</strong></TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">{formatValue(precision[k])}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell><strong>Recall</strong></TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">{formatValue(recall[k])}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell><strong>NDCG</strong></TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">{formatValue(ndcg[k])}</TableCell>
                   ))}
                 </TableRow>
                 <TableRow>
                   <TableCell><strong>Hit Rate</strong></TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">{formatValue(hitRate[k])}</TableCell>
                   ))}
                 </TableRow>
@@ -185,7 +223,7 @@ export const MetricsCard: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Metric</TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">@{k}</TableCell>
                   ))}
                 </TableRow>
@@ -198,7 +236,7 @@ export const MetricsCard: React.FC = () => {
                       <strong>Mutual Accept Rate</strong>
                     </Box>
                   </TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">{formatValue(mutualAccept[k])}</TableCell>
                   ))}
                 </TableRow>
@@ -209,7 +247,7 @@ export const MetricsCard: React.FC = () => {
                       <strong>Chat Start Rate</strong>
                     </Box>
                   </TableCell>
-                  {kValues.map(k => (
+                  {K_VALUES.map(k => (
                     <TableCell key={k} align="right">{formatValue(chatStart[k])}</TableCell>
                   ))}
                 </TableRow>

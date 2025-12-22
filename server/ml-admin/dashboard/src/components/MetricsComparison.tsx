@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -15,10 +15,13 @@ import {
   Chip,
   Skeleton,
   Stack,
+  Button,
 } from '@mui/material';
 import { CompareArrows } from '@mui/icons-material';
 import { mlAdminApi, MetricsEvaluationMetadata } from '../api/mlAdminApi';
 import { ComparisonCharts } from './ComparisonCharts';
+
+const K_VALUES = [5, 10, 20];
 
 interface MetricsData {
   algorithm: string;
@@ -35,49 +38,59 @@ interface MetricsData {
 
 export const MetricsComparison: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mlMetrics, setMlMetrics] = useState<MetricsData | null>(null);
   const [cbMetrics, setCbMetrics] = useState<MetricsData | null>(null);
   const [hybridMetrics, setHybridMetrics] = useState<MetricsData | null>(null);
-  const kValues = [5, 10, 20];
 
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
+  const fetchMetrics = useCallback(async (showSkeleton: boolean) => {
+    try {
+      if (showSkeleton) {
         setLoading(true);
-        setError(null);
-        
-        // Use unified comparison endpoint for fair evaluation on same holdout set
-        const comparison = await mlAdminApi.compareAlgorithms(kValues).catch(() => null);
-        
-        if (comparison) {
-          setMlMetrics(comparison.TwoTower || null);
-          setCbMetrics(comparison.ContentBased || null);
-          setHybridMetrics(comparison.Hybrid || null);
-        } else {
-          // Fallback to separate calls if comparison endpoint fails
-          const [ml, cb, hybrid] = await Promise.all([
-            mlAdminApi.getAggregateMetrics('TwoTower', kValues).catch(() => null),
-            mlAdminApi.getAggregateMetrics('ContentBased', kValues).catch(() => null),
-            mlAdminApi.getAggregateMetrics('Hybrid', kValues).catch(() => null),
-          ]);
-          setMlMetrics(ml);
-          setCbMetrics(cb);
-          setHybridMetrics(hybrid);
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch metrics');
-      } finally {
-        setLoading(false);
+      } else {
+        setRefreshing(true);
       }
-    };
+      setError(null);
 
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 60000); // Refresh every minute
-    return () => clearInterval(interval);
+      // Use unified comparison endpoint for fair evaluation on same holdout set
+      const comparison = await mlAdminApi.compareAlgorithms(K_VALUES).catch(() => null);
+
+      if (comparison) {
+        setMlMetrics(comparison.TwoTower || null);
+        setCbMetrics(comparison.ContentBased || null);
+        setHybridMetrics(comparison.Hybrid || null);
+      } else {
+        // Fallback to separate calls if comparison endpoint fails
+        const [ml, cb, hybrid] = await Promise.all([
+          mlAdminApi.getAggregateMetrics('TwoTower', K_VALUES).catch(() => null),
+          mlAdminApi.getAggregateMetrics('ContentBased', K_VALUES).catch(() => null),
+          mlAdminApi.getAggregateMetrics('Hybrid', K_VALUES).catch(() => null),
+        ]);
+        setMlMetrics(ml);
+        setCbMetrics(cb);
+        setHybridMetrics(hybrid);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch metrics');
+    } finally {
+      if (showSkeleton) {
+        setLoading(false);
+      } else {
+        setRefreshing(false);
+      }
+    }
   }, []);
 
-  if (loading) {
+  useEffect(() => {
+    void fetchMetrics(true);
+  }, [fetchMetrics]);
+
+  const handleRefresh = () => {
+    void fetchMetrics(false);
+  };
+
+  if (loading && !mlMetrics && !cbMetrics && !hybridMetrics) {
     return (
       <Card>
         <CardContent>
@@ -91,13 +104,21 @@ export const MetricsComparison: React.FC = () => {
     );
   }
 
-  if (error || (!mlMetrics && !cbMetrics && !hybridMetrics)) {
+  if (!mlMetrics && !cbMetrics && !hybridMetrics) {
     return (
       <Card>
         <CardContent>
-          <Alert severity="warning">
+          <Alert severity="warning" sx={{ mb: 2 }}>
             {error || 'Metrics data not available. Ensure both services are running and have user interactions.'}
           </Alert>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
         </CardContent>
       </Card>
     );
@@ -149,7 +170,21 @@ export const MetricsComparison: React.FC = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Algorithm Comparison
           </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
         </Box>
+
+        {error && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
         {evaluation && (
           <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
@@ -183,9 +218,9 @@ export const MetricsComparison: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {metrics.map((metric, idx) => (
+              {metrics.map((metric) => (
                 <React.Fragment key={metric.name}>
-                  {kValues.map((k, kIdx) => {
+                  {K_VALUES.map((k, kIdx) => {
                     const mlVal = metric.ml?.[k];
                     const cbVal = metric.cb?.[k];
                     const hybridVal = metric.hybrid?.[k];
@@ -193,7 +228,7 @@ export const MetricsComparison: React.FC = () => {
                     return (
                       <TableRow key={`${metric.name}-${k}`}>
                         {kIdx === 0 && (
-                          <TableCell rowSpan={kValues.length} sx={{ verticalAlign: 'top' }}>
+                          <TableCell rowSpan={K_VALUES.length} sx={{ verticalAlign: 'top' }}>
                             <strong>{metric.name}</strong>
                           </TableCell>
                         )}
@@ -218,11 +253,9 @@ export const MetricsComparison: React.FC = () => {
         </TableContainer>
 
         {/* Comparison Charts */}
-        {(mlMetrics || cbMetrics || hybridMetrics) && (
-          <Box mt={3}>
-            <ComparisonCharts mlMetrics={mlMetrics} cbMetrics={cbMetrics} hybridMetrics={hybridMetrics} />
-          </Box>
-        )}
+        <Box mt={3}>
+          <ComparisonCharts mlMetrics={mlMetrics} cbMetrics={cbMetrics} hybridMetrics={hybridMetrics} />
+        </Box>
       </CardContent>
     </Card>
   );

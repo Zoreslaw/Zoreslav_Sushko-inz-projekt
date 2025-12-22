@@ -522,10 +522,10 @@ const AppContent: React.FC = () => {
             {activePage === 'metrics' && (
               <Grid container spacing={3}>
                 <Grid size={12}>
-                  <MetricsCard />
+                  <UserMetricsLookup />
                 </Grid>
                 <Grid size={12}>
-                  <UserMetricsLookup />
+                  <MetricsCard />
                 </Grid>
                 <Grid size={12}>
                   <MetricsComparison />

@@ -86,6 +86,53 @@ type UserRecord = {
   updatedAt?: string;
 };
 
+type CreateUserForm = {
+  displayName: string;
+  email: string;
+  age: number;
+  gender: string;
+  preferenceGender: string;
+  preferenceAgeMin: number;
+  preferenceAgeMax: number;
+  languages: string[];
+  favoriteGames: string[];
+  preferenceCategories: string[];
+};
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Unknown'];
+const PREFERENCE_GENDER_OPTIONS = ['Any', 'Male', 'Female', 'Other'];
+
+// Keep in sync with `client/localization/languageMaps.ts`
+const LANGUAGE_OPTIONS = [
+  'ar',
+  'bn',
+  'zh',
+  'cs',
+  'nl',
+  'en',
+  'fi',
+  'fr',
+  'de',
+  'el',
+  'he',
+  'hi',
+  'hu',
+  'it',
+  'ja',
+  'ko',
+  'no',
+  'pl',
+  'pt',
+  'ro',
+  'ru',
+  'es',
+  'sv',
+  'th',
+  'tr',
+  'uk',
+  'vi',
+];
+
 type SegmentId = 'all' | 'new' | 'cold' | 'stale' | 'steam-missing' | 'power';
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -207,9 +254,9 @@ const personaPresets = [
       preferenceGender: 'Any',
       preferenceAgeMin: 18,
       preferenceAgeMax: 30,
-      languages: 'English',
-      favoriteGames: 'Stardew Valley, Fall Guys',
-      preferenceCategories: 'Casual, Co-op',
+      languages: ['en'],
+      favoriteGames: ['Stardew Valley', 'Fall Guys'],
+      preferenceCategories: ['Casual', 'Co-op'],
     },
   },
   {
@@ -222,9 +269,9 @@ const personaPresets = [
       preferenceGender: 'Any',
       preferenceAgeMin: 21,
       preferenceAgeMax: 34,
-      languages: 'English, Spanish',
-      favoriteGames: 'Among Us, Valorant',
-      preferenceCategories: 'Party, Competitive',
+      languages: ['en', 'es'],
+      favoriteGames: ['Among Us', 'Valorant'],
+      preferenceCategories: ['Party', 'Competitive'],
     },
   },
   {
@@ -237,9 +284,9 @@ const personaPresets = [
       preferenceGender: 'Any',
       preferenceAgeMin: 22,
       preferenceAgeMax: 35,
-      languages: 'English',
-      favoriteGames: 'Apex Legends, Dota 2',
-      preferenceCategories: 'Competitive, Team',
+      languages: ['en'],
+      favoriteGames: ['Apex Legends', 'Dota 2'],
+      preferenceCategories: ['Competitive', 'Team'],
     },
   },
 ];
@@ -277,7 +324,7 @@ export const UserManagement: React.FC = () => {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<CreateUserForm>({
     displayName: '',
     email: '',
     age: 24,
@@ -285,9 +332,9 @@ export const UserManagement: React.FC = () => {
     preferenceGender: 'Any',
     preferenceAgeMin: 18,
     preferenceAgeMax: 35,
-    languages: '',
-    favoriteGames: '',
-    preferenceCategories: '',
+    languages: [] as string[],
+    favoriteGames: [] as string[],
+    preferenceCategories: [] as string[],
   });
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -312,6 +359,13 @@ export const UserManagement: React.FC = () => {
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const [catalogGames, setCatalogGames] = useState<string[]>([]);
+  const [catalogGamesLoading, setCatalogGamesLoading] = useState(false);
+  const [catalogGamesQuery, setCatalogGamesQuery] = useState('');
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [catalogCategoriesLoading, setCatalogCategoriesLoading] = useState(false);
+  const [catalogCategoriesQuery, setCatalogCategoriesQuery] = useState('');
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
@@ -577,9 +631,9 @@ export const UserManagement: React.FC = () => {
         preferenceGender: createForm.preferenceGender,
         preferenceAgeMin: safeMin,
         preferenceAgeMax: safeMax,
-        languages: parseList(createForm.languages),
-        favoriteGames: parseList(createForm.favoriteGames),
-        preferenceCategories: parseList(createForm.preferenceCategories),
+        languages: normalizeStringList(createForm.languages),
+        favoriteGames: normalizeStringList(createForm.favoriteGames),
+        preferenceCategories: normalizeStringList(createForm.preferenceCategories),
       };
       const created = await mlAdminApi.createUser(payload);
       setCreateMessage(`User created: ${created.displayName || created.email}`);
@@ -592,9 +646,9 @@ export const UserManagement: React.FC = () => {
         preferenceGender: 'Any',
         preferenceAgeMin: 18,
         preferenceAgeMax: 35,
-        languages: '',
-        favoriteGames: '',
-        preferenceCategories: '',
+        languages: [],
+        favoriteGames: [],
+        preferenceCategories: [],
       });
       await loadUsers();
     } catch (err: any) {
@@ -835,9 +889,79 @@ export const UserManagement: React.FC = () => {
   const hasSharedGames = sharedGames.length > 0;
   const hasSharedCategories = sharedCategories.length > 0;
   const languageOptions = useMemo(
-    () => normalizeStringList([...(profileForm.languages ?? []), ...(profileForm.preferenceLanguages ?? [])]),
-    [profileForm.languages, profileForm.preferenceLanguages]
+    () => LANGUAGE_OPTIONS,
+    []
   );
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchGames = async () => {
+      if (!catalogGamesQuery.trim()) {
+        if (active) {
+          setCatalogGames([]);
+          setCatalogGamesLoading(false);
+        }
+        return;
+      }
+      setCatalogGamesLoading(true);
+      try {
+        const result = await mlAdminApi.getSteamCatalog('games', catalogGamesQuery.trim());
+        if (active) {
+          setCatalogGames(result.items ?? []);
+        }
+      } catch {
+        if (active) {
+          setCatalogGames([]);
+        }
+      } finally {
+        if (active) {
+          setCatalogGamesLoading(false);
+        }
+      }
+    };
+
+    fetchGames();
+
+    return () => {
+      active = false;
+    };
+  }, [catalogGamesQuery]);
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchCategories = async () => {
+      if (!catalogCategoriesQuery.trim()) {
+        if (active) {
+          setCatalogCategories([]);
+          setCatalogCategoriesLoading(false);
+        }
+        return;
+      }
+      setCatalogCategoriesLoading(true);
+      try {
+        const result = await mlAdminApi.getSteamCatalog('categories', catalogCategoriesQuery.trim());
+        if (active) {
+          setCatalogCategories(result.items ?? []);
+        }
+      } catch {
+        if (active) {
+          setCatalogCategories([]);
+        }
+      } finally {
+        if (active) {
+          setCatalogCategoriesLoading(false);
+        }
+      }
+    };
+
+    fetchCategories();
+
+    return () => {
+      active = false;
+    };
+  }, [catalogCategoriesQuery]);
 
   return (
     <Grid container spacing={3}>
@@ -1550,23 +1674,27 @@ export const UserManagement: React.FC = () => {
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 4 }}>
-                          <TextField
-                            label="Gender"
-                            value={profileForm.gender}
-                            onChange={(event) =>
-                              setProfileForm({ ...profileForm, gender: event.target.value })
+                          <Autocomplete
+                            options={GENDER_OPTIONS}
+                            value={profileForm.gender || 'Unknown'}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, gender: value ?? 'Unknown' })
                             }
-                            fullWidth
+                            renderInput={(params) => (
+                              <TextField {...params} label="Gender" fullWidth />
+                            )}
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 4 }}>
-                          <TextField
-                            label="Preference Gender"
-                            value={profileForm.preferenceGender}
-                            onChange={(event) =>
-                              setProfileForm({ ...profileForm, preferenceGender: event.target.value })
+                          <Autocomplete
+                            options={PREFERENCE_GENDER_OPTIONS}
+                            value={profileForm.preferenceGender || 'Any'}
+                            onChange={(_, value) =>
+                              setProfileForm({ ...profileForm, preferenceGender: value ?? 'Any' })
                             }
-                            fullWidth
+                            renderInput={(params) => (
+                              <TextField {...params} label="Preference Gender" fullWidth />
+                            )}
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
@@ -1702,21 +1830,23 @@ export const UserManagement: React.FC = () => {
                         <Grid size={{ xs: 12, md: 6 }}>
                           <Autocomplete
                             multiple
-                            freeSolo
                             options={languageOptions}
                             value={profileForm.languages}
                             onChange={(_, value) =>
                               setProfileForm({ ...profileForm, languages: value })
                             }
                             renderInput={(params) => (
-                              <TextField {...params} label="Languages" helperText="Press enter to add" />
+                              <TextField
+                                {...params}
+                                label="Languages"
+                                helperText="Select one or more language codes"
+                              />
                             )}
                           />
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
                           <Autocomplete
                             multiple
-                            freeSolo
                             options={languageOptions}
                             value={profileForm.preferenceLanguages}
                             onChange={(_, value) =>
@@ -1726,7 +1856,7 @@ export const UserManagement: React.FC = () => {
                               <TextField
                                 {...params}
                                 label="Preference languages"
-                                helperText="Press enter to add"
+                                helperText="Select one or more language codes"
                               />
                             )}
                           />
@@ -1832,23 +1962,30 @@ export const UserManagement: React.FC = () => {
                       />
                     </Grid>
                     <Grid size={{ xs: 12, md: 4 }}>
-                      <TextField
-                        label="Gender"
-                        value={createForm.gender}
-                        onChange={(event) =>
-                          setCreateForm({ ...createForm, gender: event.target.value })
+                      <Autocomplete
+                        options={GENDER_OPTIONS}
+                        value={createForm.gender || 'Unknown'}
+                        onChange={(_, value) =>
+                          setCreateForm({ ...createForm, gender: value ?? 'Unknown' })
                         }
-                        fullWidth
+                        renderInput={(params) => (
+                          <TextField {...params} label="Gender" fullWidth />
+                        )}
                       />
                     </Grid>
                     <Grid size={{ xs: 12, md: 4 }}>
-                      <TextField
-                        label="Preference Gender"
-                        value={createForm.preferenceGender}
-                        onChange={(event) =>
-                          setCreateForm({ ...createForm, preferenceGender: event.target.value })
+                      <Autocomplete
+                        options={PREFERENCE_GENDER_OPTIONS}
+                        value={createForm.preferenceGender || 'Any'}
+                        onChange={(_, value) =>
+                          setCreateForm({
+                            ...createForm,
+                            preferenceGender: value ?? 'Any',
+                          })
                         }
-                        fullWidth
+                        renderInput={(params) => (
+                          <TextField {...params} label="Preference Gender" fullWidth />
+                        )}
                       />
                     </Grid>
                     <Grid size={{ xs: 12, md: 4 }}>
@@ -1874,33 +2011,61 @@ export const UserManagement: React.FC = () => {
                       />
                     </Grid>
                     <Grid size={{ xs: 12, md: 6 }}>
-                      <TextField
-                        label="Languages (comma-separated)"
+                      <Autocomplete
+                        multiple
+                        options={languageOptions}
                         value={createForm.languages}
-                        onChange={(event) =>
-                          setCreateForm({ ...createForm, languages: event.target.value })
+                        onChange={(_, value) =>
+                          setCreateForm({ ...createForm, languages: value })
                         }
-                        fullWidth
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Languages"
+                            helperText="Select one or more language codes"
+                            fullWidth
+                          />
+                        )}
                       />
                     </Grid>
                     <Grid size={{ xs: 12, md: 6 }}>
-                      <TextField
-                        label="Favorite Games (comma-separated)"
+                      <Autocomplete
+                        multiple
+                        options={catalogGames}
+                        loading={catalogGamesLoading}
                         value={createForm.favoriteGames}
-                        onChange={(event) =>
-                          setCreateForm({ ...createForm, favoriteGames: event.target.value })
+                        onChange={(_, value) =>
+                          setCreateForm({ ...createForm, favoriteGames: value })
                         }
-                        fullWidth
+                        onInputChange={(_, value) => setCatalogGamesQuery(value)}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Favorite Games"
+                            helperText="Search games from Steam catalog"
+                            fullWidth
+                          />
+                        )}
                       />
                     </Grid>
                     <Grid size={{ xs: 12 }}>
-                      <TextField
-                        label="Preference Categories (comma-separated)"
+                      <Autocomplete
+                        multiple
+                        options={catalogCategories}
+                        loading={catalogCategoriesLoading}
                         value={createForm.preferenceCategories}
-                        onChange={(event) =>
-                          setCreateForm({ ...createForm, preferenceCategories: event.target.value })
+                        onChange={(_, value) =>
+                          setCreateForm({ ...createForm, preferenceCategories: value })
                         }
-                        fullWidth
+                        onInputChange={(_, value) => setCatalogCategoriesQuery(value)}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Preference Categories"
+                            helperText="Search categories from Steam catalog"
+                            fullWidth
+                          />
+                        )}
                       />
                     </Grid>
                   </Grid>

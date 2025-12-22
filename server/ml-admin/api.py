@@ -979,6 +979,65 @@ def steam_disconnect():
     except Exception as e:
         return jsonify({'error': str(e)}), 503
 
+@app.post('/api/admin/steam/connect')
+def admin_steam_connect():
+    """Admin endpoint to connect Steam for any user by userId (no token required)."""
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        steam_id_or_url = data.get('steamIdOrUrl')
+        
+        if not user_id:
+            return jsonify({'error': 'userId is required'}), 400
+        if not steam_id_or_url:
+            return jsonify({'error': 'steamIdOrUrl is required'}), 400
+        
+        # Call backend admin endpoint
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/admin/steam/connect/{user_id}',
+            json={'steamIdOrUrl': steam_id_or_url},
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/admin/steam/sync')
+def admin_steam_sync():
+    """Admin endpoint to sync Steam for any user by userId (no token required)."""
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        
+        if not user_id:
+            return jsonify({'error': 'userId is required'}), 400
+        
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/admin/steam/sync/{user_id}',
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+@app.post('/api/admin/steam/disconnect')
+def admin_steam_disconnect():
+    """Admin endpoint to disconnect Steam for any user by userId (no token required)."""
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        
+        if not user_id:
+            return jsonify({'error': 'userId is required'}), 400
+        
+        r = requests.post(
+            f'{BACKEND_URL}/api/users/admin/steam/disconnect/{user_id}',
+            timeout=30
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
 @app.get('/api/stats')
 def get_stats():
     import psycopg2

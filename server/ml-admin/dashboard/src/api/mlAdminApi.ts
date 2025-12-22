@@ -418,6 +418,19 @@ export const mlAdminApi = {
     });
   },
 
+  // ---- Admin Steam Operations (no token required) ----
+  async adminConnectSteam(userId: string, steamIdOrUrl: string): Promise<any> {
+    return fetchJSON('/api/admin/steam/connect', 'POST', { userId, steamIdOrUrl });
+  },
+
+  async adminSyncSteam(userId: string): Promise<any> {
+    return fetchJSON('/api/admin/steam/sync', 'POST', { userId });
+  },
+
+  async adminDisconnectSteam(userId: string): Promise<any> {
+    return fetchJSON('/api/admin/steam/disconnect', 'POST', { userId });
+  },
+
   // ---- User Admin ----
   async getUsers(): Promise<any[]> {
     return fetchJSON('/api/users', 'GET');

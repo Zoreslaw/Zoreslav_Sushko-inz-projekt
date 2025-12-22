@@ -12,6 +12,8 @@ import {
   Grid,
   List,
   ListItem,
+  ListItemAvatar,
+  ListItemButton,
   ListItemText,
   Skeleton,
   Stack,
@@ -21,6 +23,8 @@ import {
   Typography,
   InputAdornment,
   IconButton,
+  Paper,
+  alpha,
 } from '@mui/material';
 import {
   CloudSync,
@@ -34,6 +38,7 @@ import {
   SportsEsports,
   SyncAlt,
   PowerSettingsNew,
+  Person,
 } from '@mui/icons-material';
 import { mlAdminApi } from '../api/mlAdminApi';
 
@@ -61,6 +66,16 @@ export const SteamStatus: React.FC = () => {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
+  
+  // Admin flow state
+  const [users, setUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [adminSteamIdOrUrl, setAdminSteamIdOrUrl] = useState('');
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
 
   const loadHealth = useCallback(async () => {
     try {
@@ -91,6 +106,116 @@ export const SteamStatus: React.FC = () => {
   useEffect(() => {
     loadHealth();
   }, [loadHealth]);
+
+  const loadUsers = useCallback(async () => {
+    try {
+      setUsersLoading(true);
+      setUsersError(null);
+      const data = await mlAdminApi.getUsers();
+      setUsers(data || []);
+    } catch (err: any) {
+      setUsersError(err?.message ?? 'Failed to load users');
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  const selectedUser = useMemo(() => {
+    return users.find((u) => u.id === selectedUserId) ?? null;
+  }, [users, selectedUserId]);
+
+  const handleAdminConnect = async () => {
+    if (!selectedUserId) {
+      setAdminError('Please select a user first');
+      return;
+    }
+    if (!adminSteamIdOrUrl.trim()) {
+      setAdminError('Enter a Steam profile URL or SteamID64');
+      return;
+    }
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const response = await mlAdminApi.adminConnectSteam(selectedUserId, adminSteamIdOrUrl.trim());
+      setAdminMessage(`Steam connected for ${response.displayName || selectedUser?.displayName || 'user'}`);
+      setAdminSteamIdOrUrl('');
+      await loadUsers();
+      // Refresh selected user data
+      const updated = await mlAdminApi.getUser(selectedUserId);
+      if (updated) {
+        const userIndex = users.findIndex((u) => u.id === selectedUserId);
+        if (userIndex >= 0) {
+          const updatedUsers = [...users];
+          updatedUsers[userIndex] = updated;
+          setUsers(updatedUsers);
+        }
+      }
+    } catch (err: any) {
+      setAdminError(err?.message ?? 'Failed to connect Steam');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleAdminSync = async () => {
+    if (!selectedUserId) {
+      setAdminError('Please select a user first');
+      return;
+    }
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const response = await mlAdminApi.adminSyncSteam(selectedUserId);
+      setAdminMessage(`Steam synced for ${response.displayName || selectedUser?.displayName || 'user'}`);
+      await loadUsers();
+      // Refresh selected user data
+      const updated = await mlAdminApi.getUser(selectedUserId);
+      if (updated) {
+        const userIndex = users.findIndex((u) => u.id === selectedUserId);
+        if (userIndex >= 0) {
+          const updatedUsers = [...users];
+          updatedUsers[userIndex] = updated;
+          setUsers(updatedUsers);
+        }
+      }
+    } catch (err: any) {
+      setAdminError(err?.message ?? 'Failed to sync Steam');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleAdminDisconnect = async () => {
+    if (!selectedUserId) {
+      setAdminError('Please select a user first');
+      return;
+    }
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const response = await mlAdminApi.adminDisconnectSteam(selectedUserId);
+      setAdminMessage(`Steam disconnected for ${response.displayName || selectedUser?.displayName || 'user'}`);
+      await loadUsers();
+      // Refresh selected user data
+      const updated = await mlAdminApi.getUser(selectedUserId);
+      if (updated) {
+        const userIndex = users.findIndex((u) => u.id === selectedUserId);
+        if (userIndex >= 0) {
+          const updatedUsers = [...users];
+          updatedUsers[userIndex] = updated;
+          setUsers(updatedUsers);
+        }
+      }
+    } catch (err: any) {
+      setAdminError(err?.message ?? 'Failed to disconnect Steam');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
 
   const normalizedToken = useMemo(() => {
     if (!token.trim()) return '';
@@ -286,153 +411,288 @@ export const SteamStatus: React.FC = () => {
         <Card>
           <CardHeader
             title="Account Flow"
-            subheader="Connect, sync, and verify Steam profiles"
+            subheader="Connect, sync, and verify Steam profiles for any user"
             avatar={<Shield />}
+            action={
+              <Button
+                size="small"
+                startIcon={<CloudSync />}
+                onClick={loadUsers}
+                sx={{ textTransform: 'none' }}
+              >
+                Refresh Users
+              </Button>
+            }
           />
           <CardContent>
             <Grid container spacing={3}>
-              <Grid size={{ xs: 12, md: 5 }}>
-                <Stack spacing={2}>
-                  <TextField
-                    label="JWT Access Token"
-                    value={token}
-                    onChange={(event) => setToken(event.target.value)}
-                    type={showToken ? 'text' : 'password'}
-                    placeholder="Paste Bearer token"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Shield fontSize="small" />
-                        </InputAdornment>
-                      ),
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton onClick={() => setShowToken((prev) => !prev)} edge="end">
-                            {showToken ? <VisibilityOff /> : <Visibility />}
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                    fullWidth
-                  />
-                  <TextField
-                    label="Steam Profile URL or SteamID64"
-                    value={steamIdOrUrl}
-                    onChange={(event) => setSteamIdOrUrl(event.target.value)}
-                    placeholder="https://steamcommunity.com/id/..."
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <LinkIcon fontSize="small" />
-                        </InputAdornment>
-                      ),
-                    }}
-                    fullWidth
-                  />
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                    <Button
-                      variant="contained"
-                      startIcon={<SportsEsports />}
-                      onClick={handleConnect}
-                      disabled={accountLoading}
-                    >
-                      Connect
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<SyncAlt />}
-                      onClick={handleSync}
-                      disabled={accountLoading}
-                    >
-                      Sync
-                    </Button>
-                    <Button
-                      variant="text"
-                      color="error"
-                      startIcon={<PowerSettingsNew />}
-                      onClick={handleDisconnect}
-                      disabled={accountLoading}
-                    >
-                      Disconnect
-                    </Button>
+              <Grid size={{ xs: 12, md: 4 }}>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    maxHeight: 600,
+                    overflow: 'auto',
+                    background: (theme) =>
+                      `linear-gradient(140deg, ${alpha(theme.palette.primary.main, 0.04)}, ${alpha(
+                        theme.palette.secondary.main,
+                        0.02
+                      )})`,
+                  }}
+                >
+                  <Stack spacing={2}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Select User
+                    </Typography>
+                    {usersLoading ? (
+                      <Stack spacing={1}>
+                        <Skeleton variant="rounded" height={72} />
+                        <Skeleton variant="rounded" height={72} />
+                        <Skeleton variant="rounded" height={72} />
+                      </Stack>
+                    ) : usersError ? (
+                      <Alert severity="error">{usersError}</Alert>
+                    ) : users.length === 0 ? (
+                      <Alert severity="info">No users found</Alert>
+                    ) : (
+                      <List dense>
+                        {users.map((user) => {
+                          const hasSteam = Boolean(user.steamId || user.steamProfileUrl);
+                          return (
+                            <ListItem key={user.id} disablePadding>
+                              <ListItemButton
+                                selected={user.id === selectedUserId}
+                                onClick={() => {
+                                  setSelectedUserId(user.id);
+                                  setAdminError(null);
+                                  setAdminMessage(null);
+                                }}
+                                sx={{ borderRadius: 2, mb: 0.5 }}
+                              >
+                                <ListItemAvatar>
+                                  <Avatar
+                                    src={user.photoUrl || user.steamAvatarUrl || undefined}
+                                    sx={{
+                                      bgcolor: hasSteam
+                                        ? (theme) => alpha(theme.palette.success.main, 0.12)
+                                        : (theme) => alpha(theme.palette.grey[500], 0.12),
+                                    }}
+                                  >
+                                    {user.displayName?.[0] || user.email?.[0] || 'U'}
+                                  </Avatar>
+                                </ListItemAvatar>
+                                <ListItemText
+                                  primary={
+                                    <Stack direction="row" spacing={1} alignItems="center">
+                                      <Typography variant="body2" fontWeight={600}>
+                                        {user.displayName || user.email || 'Unknown'}
+                                      </Typography>
+                                      {hasSteam && (
+                                        <Chip
+                                          icon={<SportsEsports />}
+                                          label="Steam"
+                                          size="small"
+                                          color="success"
+                                          sx={{ height: 20, fontSize: '0.7rem' }}
+                                        />
+                                      )}
+                                    </Stack>
+                                  }
+                                  secondary={
+                                    <Typography variant="caption" color="text.secondary" noWrap>
+                                      {user.email || user.id}
+                                    </Typography>
+                                  }
+                                />
+                              </ListItemButton>
+                            </ListItem>
+                          );
+                        })}
+                      </List>
+                    )}
                   </Stack>
-                  {accountError && <Alert severity="error">{accountError}</Alert>}
-                  {accountMessage && <Alert severity="success">{accountMessage}</Alert>}
-                </Stack>
+                </Paper>
               </Grid>
-              <Grid size={{ xs: 12, md: 7 }}>
-                <Card variant="outlined" sx={{ p: 2 }}>
-                  {accountLoading ? (
-                    <Stack spacing={2}>
-                      <Skeleton variant="rounded" height={64} />
-                      <Skeleton variant="rounded" height={90} />
-                      <Skeleton variant="rounded" height={60} />
-                    </Stack>
-                  ) : profile ? (
-                    <Stack spacing={2}>
+              <Grid size={{ xs: 12, md: 8 }}>
+                {!selectedUserId ? (
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 4,
+                      textAlign: 'center',
+                      background: (theme) =>
+                        `linear-gradient(140deg, ${alpha(theme.palette.primary.main, 0.04)}, ${alpha(
+                          theme.palette.secondary.main,
+                          0.02
+                        )})`,
+                    }}
+                  >
+                    <Avatar
+                      sx={{
+                        width: 64,
+                        height: 64,
+                        mx: 'auto',
+                        mb: 2,
+                        bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                        color: 'primary.main',
+                      }}
+                    >
+                      <Person fontSize="large" />
+                    </Avatar>
+                    <Typography variant="h6" gutterBottom>
+                      Select a user
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Choose a user from the list to connect or manage their Steam account
+                    </Typography>
+                  </Paper>
+                ) : (
+                  <Stack spacing={2}>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        background: (theme) =>
+                          `linear-gradient(140deg, ${alpha(theme.palette.primary.main, 0.08)}, ${alpha(
+                            theme.palette.secondary.main,
+                            0.04
+                          )})`,
+                      }}
+                    >
                       <Stack direction="row" spacing={2} alignItems="center">
                         <Avatar
-                          src={profile.steamAvatarUrl || profile.photoUrl || undefined}
-                          sx={{ width: 64, height: 64 }}
+                          src={selectedUser?.photoUrl || selectedUser?.steamAvatarUrl || undefined}
+                          sx={{ width: 56, height: 56 }}
                         >
-                          {profile.steamDisplayName?.[0] || profile.displayName?.[0] || 'S'}
+                          {selectedUser?.displayName?.[0] || selectedUser?.email?.[0] || 'U'}
                         </Avatar>
-                        <Box>
+                        <Box sx={{ flexGrow: 1 }}>
                           <Typography variant="h6">
-                            {profile.steamDisplayName || profile.displayName || 'Steam Profile'}
+                            {selectedUser?.displayName || selectedUser?.email || 'Unknown User'}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {profile.steamProfileUrl || 'No profile URL available'}
+                            {selectedUser?.email || selectedUser?.id}
                           </Typography>
                         </Box>
+                        {selectedUser?.steamId && (
+                          <Chip
+                            icon={<SportsEsports />}
+                            label="Steam Connected"
+                            color="success"
+                            size="small"
+                          />
+                        )}
                       </Stack>
-                      <Divider />
-                      <Grid container spacing={2}>
-                        <Grid size={{ xs: 6, md: 4 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Steam ID
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600}>
-                            {profile.steamId || 'n/a'}
-                          </Typography>
-                        </Grid>
-                        <Grid size={{ xs: 6, md: 4 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Games Imported
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600}>
-                            {profile.steamGames?.length ?? 0}
-                          </Typography>
-                        </Grid>
-                        <Grid size={{ xs: 6, md: 4 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Categories
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600}>
-                            {profile.steamCategories?.length ?? 0}
-                          </Typography>
-                        </Grid>
-                        <Grid size={{ xs: 6, md: 4 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Last Sync
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600}>
-                            {profile.steamLastSyncedAt
-                              ? new Date(profile.steamLastSyncedAt).toLocaleString()
-                              : 'n/a'}
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                    </Stack>
-                  ) : (
-                    <Stack spacing={1}>
-                      <Typography variant="subtitle1">No Steam profile connected</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Provide a token and Steam profile link to test the full connect flow.
-                      </Typography>
-                    </Stack>
-                  )}
-                </Card>
+                    </Paper>
+
+                    {selectedUser?.steamId ? (
+                      <>
+                        <Paper variant="outlined" sx={{ p: 2 }}>
+                          <Stack spacing={2}>
+                            <Typography variant="subtitle2" color="text.secondary">
+                              Steam Profile Details
+                            </Typography>
+                            <Grid container spacing={2}>
+                              <Grid size={{ xs: 6, md: 4 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Steam ID
+                                </Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {selectedUser.steamId || 'n/a'}
+                                </Typography>
+                              </Grid>
+                              <Grid size={{ xs: 6, md: 4 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Display Name
+                                </Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {selectedUser.steamDisplayName || 'n/a'}
+                                </Typography>
+                              </Grid>
+                              <Grid size={{ xs: 6, md: 4 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Games
+                                </Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {selectedUser.steamGames?.length ?? 0}
+                                </Typography>
+                              </Grid>
+                              <Grid size={{ xs: 6, md: 4 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Categories
+                                </Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {selectedUser.steamCategories?.length ?? 0}
+                                </Typography>
+                              </Grid>
+                              <Grid size={{ xs: 6, md: 4 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  Last Sync
+                                </Typography>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {selectedUser.steamLastSyncedAt
+                                    ? new Date(selectedUser.steamLastSyncedAt).toLocaleString()
+                                    : 'n/a'}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </Stack>
+                        </Paper>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                          <Button
+                            variant="contained"
+                            startIcon={<SyncAlt />}
+                            onClick={handleAdminSync}
+                            disabled={adminLoading}
+                            fullWidth
+                          >
+                            Sync Steam
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            startIcon={<PowerSettingsNew />}
+                            onClick={handleAdminDisconnect}
+                            disabled={adminLoading}
+                            fullWidth
+                          >
+                            Disconnect
+                          </Button>
+                        </Stack>
+                      </>
+                    ) : (
+                      <>
+                        <TextField
+                          label="Steam Profile URL or SteamID64"
+                          value={adminSteamIdOrUrl}
+                          onChange={(event) => setAdminSteamIdOrUrl(event.target.value)}
+                          placeholder="https://steamcommunity.com/id/... or SteamID64"
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <LinkIcon fontSize="small" />
+                              </InputAdornment>
+                            ),
+                          }}
+                          fullWidth
+                        />
+                        <Button
+                          variant="contained"
+                          startIcon={<SportsEsports />}
+                          onClick={handleAdminConnect}
+                          disabled={adminLoading || !adminSteamIdOrUrl.trim()}
+                          fullWidth
+                          size="large"
+                        >
+                          Connect Steam Account
+                        </Button>
+                      </>
+                    )}
+
+                    {adminError && <Alert severity="error">{adminError}</Alert>}
+                    {adminMessage && <Alert severity="success">{adminMessage}</Alert>}
+                  </Stack>
+                )}
               </Grid>
             </Grid>
           </CardContent>

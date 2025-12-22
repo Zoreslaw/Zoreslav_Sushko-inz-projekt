@@ -22,6 +22,7 @@ public class UsersController : ControllerBase
     private readonly HybridRecommendationService _hybridRecommendationService;
     private readonly MetricsService _metricsService;
     private readonly CsvImportService _csvImportService;
+    private readonly SteamService _steamService;
     private const double DefaultHoldoutFraction = 0.2;
     private const int DefaultMaxUsers = 100;
     private const int DefaultMinLikesForEval = 5;
@@ -37,7 +38,8 @@ public class UsersController : ControllerBase
         AlgorithmService algorithmService,
         HybridRecommendationService hybridRecommendationService,
         MetricsService metricsService,
-        CsvImportService csvImportService)
+        CsvImportService csvImportService,
+        SteamService steamService)
     {
         _context = context;
         _logger = logger;
@@ -47,6 +49,7 @@ public class UsersController : ControllerBase
         _hybridRecommendationService = hybridRecommendationService;
         _metricsService = metricsService;
         _csvImportService = csvImportService;
+        _steamService = steamService;
     }
 
     [HttpGet]
@@ -1812,5 +1815,150 @@ public class UsersController : ControllerBase
             _logger.LogError(ex, "Error importing CSV dataset");
             return StatusCode(500, new { error = "Internal server error", message = ex.Message });
         }
+    }
+
+    [HttpPost("admin/steam/connect/{userId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult> AdminConnectSteam(string userId, [FromBody] SteamConnectRequest request)
+    {
+        if (!_steamService.HasApiKey)
+        {
+            return BadRequest(new { error = "Steam API key is not configured." });
+        }
+
+        if (request == null || string.IsNullOrWhiteSpace(request.SteamIdOrUrl))
+        {
+            return BadRequest(new { error = "Steam ID or profile URL is required." });
+        }
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return NotFound(new { error = "User not found" });
+        }
+
+        try
+        {
+            var result = await _steamService.ConnectAsync(request.SteamIdOrUrl);
+            user.SteamId = result.SteamId;
+            user.SteamDisplayName = result.SteamDisplayName;
+            user.SteamProfileUrl = result.SteamProfileUrl;
+            user.SteamAvatarUrl = result.SteamAvatarUrl;
+            user.SteamGames = result.Games;
+            user.SteamCategories = result.Categories;
+            user.SteamLastSyncedAt = result.SyncedAt;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Steam account connected for user {UserId} via admin", userId);
+
+            return Ok(new
+            {
+                userId = user.Id,
+                displayName = user.DisplayName,
+                steamId = user.SteamId,
+                steamDisplayName = user.SteamDisplayName,
+                steamProfileUrl = user.SteamProfileUrl,
+                steamAvatarUrl = user.SteamAvatarUrl,
+                steamGames = user.SteamGames,
+                steamCategories = user.SteamCategories,
+                steamLastSyncedAt = user.SteamLastSyncedAt
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("admin/steam/sync/{userId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult> AdminSyncSteam(string userId)
+    {
+        if (!_steamService.HasApiKey)
+        {
+            return BadRequest(new { error = "Steam API key is not configured." });
+        }
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return NotFound(new { error = "User not found" });
+        }
+
+        if (string.IsNullOrWhiteSpace(user.SteamId))
+        {
+            return BadRequest(new { error = "Steam account is not connected." });
+        }
+
+        try
+        {
+            var result = await _steamService.ConnectAsync(user.SteamId);
+            user.SteamDisplayName = result.SteamDisplayName;
+            user.SteamProfileUrl = result.SteamProfileUrl;
+            user.SteamAvatarUrl = result.SteamAvatarUrl;
+            user.SteamGames = result.Games;
+            user.SteamCategories = result.Categories;
+            user.SteamLastSyncedAt = result.SyncedAt;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Steam account synced for user {UserId} via admin", userId);
+
+            return Ok(new
+            {
+                userId = user.Id,
+                displayName = user.DisplayName,
+                steamId = user.SteamId,
+                steamDisplayName = user.SteamDisplayName,
+                steamProfileUrl = user.SteamProfileUrl,
+                steamAvatarUrl = user.SteamAvatarUrl,
+                steamGames = user.SteamGames,
+                steamCategories = user.SteamCategories,
+                steamLastSyncedAt = user.SteamLastSyncedAt
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("admin/steam/disconnect/{userId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult> AdminDisconnectSteam(string userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return NotFound(new { error = "User not found" });
+        }
+
+        user.SteamId = null;
+        user.SteamDisplayName = null;
+        user.SteamProfileUrl = null;
+        user.SteamAvatarUrl = null;
+        user.SteamGames = new List<string>();
+        user.SteamCategories = new List<string>();
+        user.SteamLastSyncedAt = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Steam account disconnected for user {UserId} via admin", userId);
+
+        return Ok(new
+        {
+            userId = user.Id,
+            displayName = user.DisplayName,
+            message = "Steam account disconnected"
+        });
     }
 }

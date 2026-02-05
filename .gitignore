@@ -146,6 +146,7 @@ artifacts/
 ## AppSettings with sensitive data
 appsettings.*.json
 !appsettings.json
+!appsettings.Development.json
 !appsettings.Development.json.example
 
 # ============================================
@@ -230,9 +231,8 @@ models/
 checkpoints/
 weights/
 
-# Allow code under server/network/models (package code, not model artifacts)
-!server/network/models/
-!server/network/models/**
+# NOTE: Source code exceptions for models/ and data/ directories are at the
+# bottom of the "Data Files" section (gitignore last-match-wins ordering)
 
 # ============================================
 # Docker
@@ -351,6 +351,7 @@ tmp/
 *.orig
 *.rej
 *.patch
+!client/patches/**
 *.diff
 backups/
 *.sql
@@ -365,6 +366,17 @@ datasets/
 *.tsv
 *.parquet
 *.feather
+
+# Re-allow source code packages after broad data/ and models/ rules
+# (gitignore last-match-wins, so these MUST come after the blocking rules)
+!server/network/data/
+!server/network/data/**
+!server/network/models/
+!server/network/models/**
+!server/TeamUp.Api/Data/
+!server/TeamUp.Api/Data/**
+!server/TeamUp.Api/Models/
+!server/TeamUp.Api/Models/**
 
 # ============================================
 # Documentation Builds

@@ -1,9 +1,32 @@
 # ============================================
-# TeamUp Project - Comprehensive .gitignore
+# TeamUp Project - Root .gitignore
 # ============================================
 
 # ============================================
-# Node.js / React Native / Expo
+# Environment Variables & Secrets
+# ============================================
+.env
+.env.*
+!.env.example
+!.env.template
+
+# ============================================
+# Certificates & Keys
+# ============================================
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+*.credentials
+credentials/
+
+# ============================================
+# Node.js
 # ============================================
 node_modules/
 npm-debug.log*
@@ -13,51 +36,35 @@ pnpm-debug.log*
 lerna-debug.log*
 .pnp
 .pnp.js
-.yarn/
-.expo/
-.expo-shared/
-dist/
-dist-ssr/
-*.local
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
 
 # ============================================
-# React Native / Expo
+# Expo / React Native
 # ============================================
-.expo/
-.expo-shared/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
-ios-build/
-android-build/
 .expo/
 .expo-shared/
 .expo-metro-*
-.expo/
+web-build/
+ios-build/
+android-build/
+expo-env.d.ts
+*.orig.*
 
 # ============================================
-# Android Build Files
+# Android
 # ============================================
 *.apk
 *.aab
 *.ap_
 *.dex
 *.class
-bin/
-gen/
-out/
-build/
-.gradle/
 local.properties
 *.iml
-.idea/
-*.keystore
-*.jks
-*.bak.jks
 android/app/debug.keystore
 android/app/release.keystore
 android/app/*.keystore
@@ -71,12 +78,9 @@ android/.gradle/
 android/local.properties
 android/.idea/
 android/*.iml
-*.ap_
-*.apk
-*.aab
 
 # ============================================
-# iOS Build Files
+# iOS
 # ============================================
 *.pbxuser
 !default.pbxuser
@@ -100,11 +104,12 @@ ios/.xcode.env.local
 ios/.xcode.env
 *.xcworkspace
 !default.xcworkspace
+*.mobileprovision
+*.p8
 
 # ============================================
 # .NET / C# / ASP.NET Core
 # ============================================
-## Build results
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
@@ -120,224 +125,97 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
-## Visual Studio cache/options directory
 .vs/
-.vscode/
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
 *.userprefs
 
-## Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-[Ww][Ii][Nn]32/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
-[Ll]ogs/
-
-## Visual Studio 2015/2017 cache/options directory
-.vs/
-
-## Visual Studio Code
-.vscode/
-*.code-workspace
-
-## Rider
-.idea/
-*.sln.iml
-
-## MSTest test Results
-[Tt]est[Rr]esult*/
-[Bb]uild[Ll]og.*
-
-## .NET Core
 project.lock.json
 project.fragment.lock.json
 artifacts/
-
-## ASP.NET Scaffolding
-ScaffoldingReadMe.txt
-
-## NuGet Packages
 *.nupkg
 *.snupkg
 **/packages/*
 !**/packages/build/
 *.nuget.props
 *.nuget.targets
-project.lock.json
-project.fragment.lock.json
-artifacts/
-
-## .NET Core publish
 *.publishsettings
-
-## Rider
-.idea/
-*.sln.iml
-
-## Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-[Ww][Ii][Nn]32/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
-[Ll]ogs/
 
 ## AppSettings with sensitive data
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json.example
-appsettings.Production.json
-appsettings.Staging.json
 
 # ============================================
-# Python / ML Services
+# Python
 # ============================================
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
-build/
 develop-eggs/
-dist/
-downloads/
 eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
+pip-wheel-metadata/
+share/python-wheels/
 pip-log.txt
 pip-delete-this-directory.txt
+.venv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+.python-version
+Pipfile.lock
+__pypackages__/
 
-# Unit test / coverage reports
-htmlcov/
+## Testing
 .tox/
 .nox/
 .coverage
 .coverage.*
-.cache
 nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
 .pytest_cache/
+htmlcov/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-.conda/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
+## Type checkers
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Pyre type checker
 .pyre/
 
-# ML Models
+## Jupyter
+.ipynb_checkpoints
+
+## Misc Python
+*.mo
+*.pot
+*.sage.py
+instance/
+.webassets-cache
+.scrapy
+celerybeat-schedule
+celerybeat.pid
+.spyderproject
+.spyproject
+.ropeproject
+
+# ============================================
+# ML Models & Training Artifacts
+# ============================================
 *.pth
 *.pt
 *.ckpt
@@ -347,10 +225,10 @@ dmypy.json
 *.joblib
 *.pkl
 *.model
+*.hdf5
 models/
 checkpoints/
 weights/
-*.hdf5
 
 # Allow code under server/network/models (package code, not model artifacts)
 !server/network/models/
@@ -360,23 +238,6 @@ weights/
 # Docker
 # ============================================
 docker-compose.override.yml
-.env
-.env.local
-.env.*.local
-.dockerignore
-
-# ============================================
-# Environment Variables
-# ============================================
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.staging.local
-*.env
-!.env.example
-!.env.template
 
 # ============================================
 # Firebase / Google Services
@@ -390,79 +251,26 @@ firestore-debug.log
 ui-debug.log
 .firebase/
 .firebaserc
-firebase.json
-.firebaserc
-**/configs/**/*.json
-client/configs/
 
 # ============================================
 # IDE / Editor Files
 # ============================================
-# Visual Studio Code
 .vscode/
 *.code-workspace
-
-# Visual Studio
-.vs/
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
-# JetBrains Rider / IntelliJ IDEA
 .idea/
-*.iml
 *.iws
 *.ipr
-out/
-
-# Eclipse
-.classpath
-.project
-.settings/
-bin/
-
-# NetBeans
-nbproject/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
-
-# Sublime Text
 *.sublime-project
 *.sublime-workspace
-
-# Vim
 *.swp
 *.swo
-*~
 .vim/
-
-# Emacs
-*~
 \#*\#
 .\#*
 
 # ============================================
 # OS Files
 # ============================================
-# Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# macOS
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -472,39 +280,49 @@ Icon
 .Trashes
 .AppleDB
 .AppleDesktop
-Network Trash Folder
-Temporary Items
 .apdisk
-
-# Linux
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
 *~
 .directory
 .Trash-*
 .nfs*
 
 # ============================================
-# Testing
+# Build Artifacts
+# ============================================
+build/
+dist/
+out/
+target/
+*.war
+*.ear
+*.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+gen/
+bin/
+
+# ============================================
+# Testing & Coverage
 # ============================================
 coverage/
 .nyc_output/
 *.lcov
 .jest/
-*.snap
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+test-results/
 
 # ============================================
 # Logs
 # ============================================
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 *.log.*
 
 # ============================================
@@ -523,53 +341,23 @@ lerna-debug.log*
 *.tmp
 *.temp
 *.bak
-*.swp
-*.swo
-*~
 .cache/
 temp/
 tmp/
 
 # ============================================
-# Build Artifacts
+# Backups & Patches
 # ============================================
-build/
-dist/
-out/
-target/
-*.war
-*.ear
-*.jar
-*.class
+*.orig
+*.rej
+*.patch
+*.diff
+backups/
+*.sql
+*.dump
 
 # ============================================
-# Package Manager Files
-# ============================================
-# Yarn
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
-
-# ============================================
-# Certificates & Keys
-# ============================================
-*.pem
-*.key
-*.crt
-*.cert
-*.p12
-*.pfx
-*.jks
-*.keystore
-*.truststore
-credentials/
-*.credentials
-
-# ============================================
-# ML Training Data & Models
+# Data Files
 # ============================================
 data/
 datasets/
@@ -577,18 +365,6 @@ datasets/
 *.tsv
 *.parquet
 *.feather
-checkpoints/
-models/
-weights/
-*.pth
-*.pt
-*.h5
-*.pb
-*.onnx
-*.joblib
-*.pkl
-*.model
-*.hdf5
 
 # ============================================
 # Documentation Builds
@@ -600,42 +376,16 @@ _site/
 # ============================================
 # Misc
 # ============================================
-*.orig
-*.rej
-*.patch
-*.diff
 .vscode-test/
 .history/
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
 *.cache
 .eslintcache
 .stylelintcache
 
 # ============================================
-# Documentation Files (Thesis/Dissertation)
+# Keep templates and examples
 # ============================================
-*.docx
-*.doc
-*.odt
-szablon*.docx
-*szablon*.docx
-praca*.docx
-*dokument*.docx
-
-# ============================================
-# Custom Project Files
-# ============================================
-# Keep example configs but ignore actual configs
 !*.example
 !*.template
 !*.sample
-
-# Exception for Gradle wrapper
-!client/android/gradle/wrapper/gradle-wrapper.jar
-
-# Exception for Google Services config (source and destination)
-!client/configs/google-services.json
-!client/android/app/google-services.json
+!.gitkeep

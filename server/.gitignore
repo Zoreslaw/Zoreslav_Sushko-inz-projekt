@@ -1,0 +1,57 @@
+# ============================================
+# TeamUp Server .gitignore
+# ============================================
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# .NET
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+.vs/
+*.user
+
+# Docker volumes
+postgres_data/
+redis_data/
+pgadmin_data/
+
+# ML models & training artifacts
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.pkl
+*.joblib
+*.onnx
+shared/
+
+# Logs
+*.log
+logs/
+
+# Node (ml-admin dashboard)
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

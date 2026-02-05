@@ -1,15 +1,15 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
 
 # Expo
 .expo/
+.expo-shared/
+.expo-metro-*
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native builds
 *.orig.*
 *.jks
 *.p8
@@ -17,10 +17,15 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Keystores & credentials
+*.keystore
+credentials/
+@zoryaha__teamup-project*.jks
+
 # Metro
 .metro-health-check*
 
-# debug
+# Debug
 npm-debug.*
 yarn-debug.*
 yarn-error.*
@@ -29,18 +34,22 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment
+.env
+.env.*
+!.env.example
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 
+# Expo template
 app-example
 
-# teamup-4f142-firebase-adminsdk-fbsvc-d29d7dba8a.json
-# google-services.json
+# Android build artifacts
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
 
-# android
-# .env
-# config/constants.ts
-# config/openai.ts
+# EAS
+.eas/

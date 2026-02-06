@@ -38,6 +38,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=teamup;Username=teamup_user;Password=teamup_password"
     ports:
       - "5001:8080"
     depends_on:

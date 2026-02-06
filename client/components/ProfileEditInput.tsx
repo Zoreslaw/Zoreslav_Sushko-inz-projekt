@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, TextInput } from 'react-native';
 import { useThemeColor } from '@/hooks/useThemeColor';
 
@@ -12,15 +12,21 @@ interface ProfileEditInputProps {
 
 const ProfileEditInput: React.FC<ProfileEditInputProps> = ({
   placeholder,
-  value = '',
+  value: initialValue = '',
   onChangeText,
   isNumeric = false,
   multiline = false,
 }) => {
+  const [value, setValue] = useState(initialValue);
   const background = useThemeColor({}, 'secondaryBackground');
   const border = useThemeColor({}, 'separator');
   const text = useThemeColor({}, 'text');
   const placeholderColor = useThemeColor({}, 'secondaryText');
+
+  const handleChangeText = (v: string) => {
+    setValue(v);
+    onChangeText(v);
+  };
 
   return (
     <View
@@ -41,7 +47,7 @@ const ProfileEditInput: React.FC<ProfileEditInputProps> = ({
           { color: text },
           multiline && styles.multiline,
         ]}
-        onChangeText={onChangeText}
+        onChangeText={handleChangeText}
         inputMode={isNumeric ? 'numeric' : 'text'}
         keyboardType={isNumeric ? 'numeric' : 'default'}
         multiline={multiline}

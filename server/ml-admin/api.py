@@ -51,7 +51,7 @@ CURRENT_MODEL_VERSION_FILE = os.getenv(
 # App
 # -----------------------------------
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB limit
 CORS(app, supports_credentials=True)
 
 # -----------------------------------
